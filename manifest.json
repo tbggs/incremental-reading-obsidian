@@ -1,11 +1,10 @@
 {
-	"id": "sample-plugin",
-	"name": "Sample Plugin",
-	"version": "1.0.0",
+	"id": "incremental-learning",
+	"name": "Incremental Learning",
+	"version": "0.0.1",
 	"minAppVersion": "0.15.0",
-	"description": "Demonstrates some of the capabilities of the Obsidian API.",
-	"author": "Obsidian",
-	"authorUrl": "https://obsidian.md",
-	"fundingUrl": "https://obsidian.md/pricing",
+	"description": "Leverage spaced repetition to incrementally build understanding and retain knowledge.",
+	"author": "Gautam Panakkal",
+	"authorUrl": "https://github.com/gpanakkal",
 	"isDesktopOnly": false
 }
