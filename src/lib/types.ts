@@ -6,11 +6,6 @@ export interface ReviewItem extends Card {
   blockId: string;
 }
 
-export interface Extract {
-  id: number;
-  text: string;
-}
-
 export interface ReviewLog {
   id: number;
 }

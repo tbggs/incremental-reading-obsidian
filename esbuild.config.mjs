@@ -1,6 +1,7 @@
 import esbuild from "esbuild";
 import process from "process";
 import builtins from "builtin-modules";
+// import { wasmLoader } from 'esbuild-plugin-wasm';
 
 const banner =
 `/*
@@ -15,8 +16,11 @@ const context = await esbuild.context({
 	banner: {
 		js: banner,
 	},
-	entryPoints: ["main.ts"],
+	entryPoints: ["src/main.ts"],
 	bundle: true,
+	// plugins: [
+	// 	wasmLoader(),
+	// ],
 	external: [
 		"obsidian",
 		"electron",

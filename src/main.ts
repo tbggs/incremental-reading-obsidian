@@ -1,5 +1,6 @@
-import { App, Editor, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Setting } from 'obsidian';
+import { addIcon, App, Editor, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Setting } from 'obsidian';
 import { retainSelection } from 'src/retain-selection';
+import { SQLiteRepository } from './lib/repository';
 
 // Remember to rename these classes and interfaces!
 
@@ -18,16 +19,18 @@ export default class MyPlugin extends Plugin {
 		await this.loadSettings();
 
 		// This creates an icon in the left ribbon.
-		const ribbonIconEl = this.addRibbonIcon('dice', 'Sample Plugin', (evt: MouseEvent) => {
+		// TODO: replace the placeholder
+		const ribbonIconEl = this.addRibbonIcon('lightbulb', 'Incremental Learning', (evt: MouseEvent) => {
 			// Called when the user clicks the icon.
 			new Notice('This is a notice!');
 		});
 		// Perform additional things with the ribbon
-		ribbonIconEl.addClass('my-plugin-ribbon-class');
+		ribbonIconEl.addClass('incremental-learning-ribbon');
 
-		// This adds a status bar item to the bottom of the app. Does not work on mobile apps.
-		const statusBarItemEl = this.addStatusBarItem();
-		statusBarItemEl.setText('Status Bar Text');
+		// TODO: show counts of cards and extracts in queue?
+		// // This adds a status bar item to the bottom of the app. Does not work on mobile apps.
+		// const statusBarItemEl = this.addStatusBarItem();
+		// statusBarItemEl.setText('Status Bar Text');
 
 		// This adds a simple command that can be triggered anywhere
 		this.addCommand({
@@ -45,6 +48,8 @@ export default class MyPlugin extends Plugin {
 				return retainSelection(editor, this.app);
 			}
 		});
+
+		// TODO: set up UI modal
 		// This adds a complex command that can check whether the current state of the app allows execution of the command
 		this.addCommand({
 			id: 'open-sample-modal-complex',
@@ -74,8 +79,29 @@ export default class MyPlugin extends Plugin {
 			console.log('click', evt);
 		});
 
-		// When registering intervals, this function will automatically clear the interval when the plugin is disabled.
-		this.registerInterval(window.setInterval(() => console.log('setInterval'), 5 * 60 * 1000));
+		// // When registering intervals, this function will automatically clear the interval when the plugin is disabled.
+		// this.registerInterval(window.setInterval(() => console.log('setInterval'), 5 * 60 * 1000));
+
+
+		this.app.workspace.onLayoutReady(async () => {
+			// expensive startup operations should go here
+			const repo = await SQLiteRepository.start(this.app);
+
+			const source = 'https://help.supermemo.org/wiki/Incremental_learning';
+			const reference = ''; // TODO: get the path to the new file
+			const nextReview = Date.now() + 86400 * 1000; // a day ahead
+
+			const executeExampleQuery = (source: string, reference: string, nextReview: number) => {
+				const myQuery = `INSERT INTO extract (source, reference, next_review) ` +
+												`VALUES ($1, $2, $3)`;
+
+				const result = repo.db?.exec(myQuery, [source, reference, nextReview]);
+				return result;
+			}
+
+			// const result = executeExampleQuery(source, reference, nextReview);
+			// console.log({ insertResult: result });
+		});
 	}
 
 	onunload() {
