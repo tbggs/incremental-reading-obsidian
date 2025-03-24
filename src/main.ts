@@ -14,6 +14,7 @@ const DEFAULT_SETTINGS: MyPluginSettings = {
 
 export default class MyPlugin extends Plugin {
 	settings: MyPluginSettings;
+  repo?: SQLiteRepository;
 
 	async onload() {
 		await this.loadSettings();
@@ -73,11 +74,11 @@ export default class MyPlugin extends Plugin {
 		// This adds a settings tab so the user can configure various aspects of the plugin
 		this.addSettingTab(new SampleSettingTab(this.app, this));
 
-		// If the plugin hooks up any global DOM events (on parts of the app that doesn't belong to this plugin)
-		// Using this function will automatically remove the event listener when this plugin is disabled.
-		this.registerDomEvent(document, 'click', (evt: MouseEvent) => {
-			console.log('click', evt);
-		});
+		// // If the plugin hooks up any global DOM events (on parts of the app that doesn't belong to this plugin)
+		// // Using this function will automatically remove the event listener when this plugin is disabled.
+		// this.registerDomEvent(document, 'click', (evt: MouseEvent) => {
+		// 	console.log('click', evt);
+		// });
 
 		// // When registering intervals, this function will automatically clear the interval when the plugin is disabled.
 		// this.registerInterval(window.setInterval(() => console.log('setInterval'), 5 * 60 * 1000));
@@ -85,22 +86,34 @@ export default class MyPlugin extends Plugin {
 
 		this.app.workspace.onLayoutReady(async () => {
 			// expensive startup operations should go here
+
+      // const currentView = this.app.workspace.getActiveViewOfType(MarkdownView);
+      // const currentDoc = currentView?.file;
+      // console.log({ currentDoc, currentFile });
 			const repo = await SQLiteRepository.start(this.app);
+      this.repo = repo;
+      const currentFile = this.app.workspace.getActiveFile();
+
+      if (!currentFile) {
+        console.warn('no doc open!');
+        return;
+      }
 
 			const source = 'https://help.supermemo.org/wiki/Incremental_learning';
-			const reference = ''; // TODO: get the path to the new file
+			const reference = `extracts/${currentFile.name}`; // TODO: get the path to the new file
 			const nextReview = Date.now() + 86400 * 1000; // a day ahead
 
-			const executeExampleQuery = (source: string, reference: string, nextReview: number) => {
+			const executeExampleQuery = async (source: string, reference: string, nextReview: number) => {
 				const myQuery = `INSERT INTO extract (source, reference, next_review) ` +
 												`VALUES ($1, $2, $3)`;
 
-				const result = repo.db?.exec(myQuery, [source, reference, nextReview]);
+				const result = await repo.query(myQuery, [source, reference, nextReview]);
 				return result;
 			}
 
-			// const result = executeExampleQuery(source, reference, nextReview);
-			// console.log({ insertResult: result });
+			const result = await executeExampleQuery(source, reference, nextReview);
+      const fetchQuery = 'SELECT rowid, * FROM extract';
+      const fetchResult = await repo.query(fetchQuery);
 		});
 	}
 

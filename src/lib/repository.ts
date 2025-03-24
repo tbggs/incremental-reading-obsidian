@@ -1,11 +1,10 @@
 import { App, DataAdapter } from "obsidian";
-import initSqlJs, { Database, QueryExecResult } from "sql.js";
+import initSqlJs, { BindParams, Database, QueryExecResult } from "sql.js";
 import { pluginId, WASM_FILE_NAME, DATABASE_FILE_NAME } from './constants';
 // import * as schema from './schema.sql';
 // import wasm from 'sql-wasm.wasm';
 
 // console.log({wasmType: typeof wasm});
-
 
 export class SQLiteRepository {
   app: App;
@@ -29,9 +28,35 @@ export class SQLiteRepository {
     return repo;
   }
 
-  // TODO: handle error better
-  query(query: string): QueryExecResult[] | null {
-    return this.db?.exec(query) ?? null;
+  /**
+   *
+   *  TODO:
+   * - format results as objects
+   * -
+   * - handle errors better
+   * @param query
+   * @returns 
+   */
+  async query(query: string, params?: BindParams, isMutation = false) {
+    const result = this.db?.exec(query, params);
+    if (isMutation) await this.save();
+    if (!result) return null;
+
+    const formatted = result.map(({ columns, values }) => {
+      // in values, each element represents a row
+      const formattedEntries = values.map((row) => {
+        const output = row.reduce((acc, cell, i) => Object.assign(acc, { [columns[i]]: cell }), {});
+
+        return output;
+      });
+
+      return formattedEntries;
+    }).flat();
+
+    console.log({ queryResult: result });
+    console.table(formatted);
+
+    return formatted;
   }
 
   async save() {
@@ -50,6 +75,22 @@ export class SQLiteRepository {
     const schema = await this.adapter.read(this.getFilePath('src/lib/schema.sql'));
     db.exec(schema);
     return db;
+  }
+
+  async getSchema(tableName: string) {
+    const result = this.db?.exec('SELECT sql from sqlite_schema WHERE name = $1', [tableName]);
+    if (!result) {
+      console.warn(`No schema found for table ${tableName}`);
+      return;
+    }
+
+    const schemaString = result[0].values[0][0];
+    if (!schemaString) {
+      console.warn('No schema returned');
+      return;
+    }
+    const segments = schemaString.toString().split('\n');
+    segments.forEach(console.log);
   }
 
   /**
@@ -93,7 +134,7 @@ export class SQLiteRepository {
       pathSegments.unshift(this.app.vault.adapter.basePath);
     }
 
-    console.log({ pathSegments });
+    // console.log({ pathSegments });
     const basePath = pathSegments.join('/');
     return basePath;
   }
