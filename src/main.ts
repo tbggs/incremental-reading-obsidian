@@ -1,4 +1,5 @@
-import { addIcon, App, Editor, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Setting } from 'obsidian';
+import type { App, Editor, MarkdownView } from 'obsidian';
+import { addIcon, Modal, Notice, Plugin, PluginSettingTab, Setting } from 'obsidian';
 import { retainSelection } from 'src/retain-selection';
 import { SQLiteRepository } from './lib/repository';
 
@@ -36,8 +37,14 @@ export default class MyPlugin extends Plugin {
 		this.addCommand({
 			id: 'retain-selection',
 			name: 'retain selection',
+			hotkeys: [
+				{
+					modifiers: ['Alt'],
+					key: 'X',
+				}
+			], // TODO: add setting to customize
 			editorCallback: (editor: Editor, view: MarkdownView) => {
-				return retainSelection(editor, this.app);
+				return retainSelection(editor, view, this.app);
 			}
 		});
 
