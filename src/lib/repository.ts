@@ -1,7 +1,6 @@
 import { App, DataAdapter } from "obsidian";
 import initSqlJs, { BindParams, Database, QueryExecResult } from "sql.js";
-import { pluginId, WASM_FILE_NAME, DATABASE_FILE_NAME } from './constants';
-// import * as schema from './schema.sql';
+import { pluginId, WASM_FILE_NAME, DATABASE_FILE_NAME, SCHEMA_FILE_PATH } from './constants';
 // import wasm from 'sql-wasm.wasm';
 
 // console.log({wasmType: typeof wasm});
@@ -9,7 +8,7 @@ import { pluginId, WASM_FILE_NAME, DATABASE_FILE_NAME } from './constants';
 export class SQLiteRepository {
   app: App;
   adapter: DataAdapter;
-  db?: Database;
+  db: Database;
 
   private constructor(app: App) {
     this.app = app;
@@ -23,42 +22,88 @@ export class SQLiteRepository {
     const repo = new SQLiteRepository(app);
     // load the database file or create it if loading fails
     // TODO: handle failed loads when the file exists
-    repo.db = await repo.loadDb() ?? await repo.initDb();
-    await repo.save();
+    await repo.loadDb() ?? await repo.initDb();
     return repo;
   }
 
   /**
-   *
+   * Execute a read query and return an array of objects corresponding to table rows
    *  TODO:
-   * - format results as objects
-   * -
-   * - handle errors better
+   * - verify this works on all tables, with inner and outer JOINs, etc
+   * - handle errors better?
    * @param query
-   * @returns 
+   * @returns an array where each top-level element is the result of a query
    */
-  async query(query: string, params?: BindParams, isMutation = false) {
-    const result = this.db?.exec(query, params);
-    if (isMutation) await this.save();
+  async query(query: string, params?: BindParams) {
+    const result = this.db.exec(query, params);
     if (!result) return null;
 
-    const formatted = result.map(({ columns, values }) => {
-      // in values, each element represents a row
-      const formattedEntries = values.map((row) => {
-        const output = row.reduce((acc, cell, i) => Object.assign(acc, { [columns[i]]: cell }), {});
+    // in SQL.js, selected rows are returned in form [{ columns: string[], values: Array<SQLValue[]> }]
+    const formatted = this.formatResult(result[0]);
 
-        return output;
-      });
-
-      return formattedEntries;
-    }).flat();
-
-    console.log({ queryResult: result });
+    console.log('query result:');
     console.table(formatted);
 
     return formatted;
   }
 
+  /**
+   * Execute a write query
+   *  TODO:
+   * - handle errors better?
+   * @param query
+   * @returns an array where each top-level element is the result of a query
+   */
+  async mutate(query: string, params?: BindParams) {
+    const result = this.db.exec(query, params);
+    if (!result) return null;
+
+    await this.save();
+    console.log('mutation result: ', result);
+    return result;
+  }
+
+  /**
+   * Execute one or more queries and return an array of objects corresponding to table rows.
+   * Use `query` or `mutation` methods above instead where possible.
+   *
+   *  TODO:
+   * - verify this works on all tables, with inner and outer JOINs, etc
+   * - handle errors better?
+   * @param query
+   * @returns an array where each top-level element is the result of a query
+   */
+  async execSql(query: string, params?: BindParams, isMutation = false) {
+    const result = this.db.exec(query, params);
+    if (!result) return null;
+    if (isMutation) await this.save();
+
+    // in SQL.js, selected rows are returned in form [{ columns: string[], values: Array<SQLValue[]> }]
+    const formatted = result.map(this.formatResult);
+
+    console.log({ execResult: result });
+    console.table(formatted);
+
+    return formatted;
+  }
+
+  /**
+   * Format the result of a single query
+   */
+  formatResult(result: QueryExecResult): Array<Record<string, string>> {
+    const { columns, values } = result;
+    const formattedEntries = values.map((row) => {
+      const output = row.reduce((acc, cell, i) => Object.assign(acc, { [columns[i]]: cell }), {});
+
+      return output;
+    });
+
+    return formattedEntries;
+  }
+
+  /**
+   * Overwrite or create the database file
+   */
   async save() {
     if (!this.db) throw new Error('Database was not initialized on repository');
     const data = this.db.export().buffer;
@@ -71,14 +116,16 @@ export class SQLiteRepository {
    */
   async initDb() {
     const sql = await this.loadWasm();
-    const db = new sql.Database();
-    const schema = await this.adapter.read(this.getFilePath('src/lib/schema.sql'));
-    db.exec(schema);
-    return db;
+    this.db = new sql.Database();
+    const schema = await this.adapter.read(this.getFilePath(SCHEMA_FILE_PATH));
+    this.db.exec(schema);
+    await this.save();
+    return this.db;
   }
 
   async getSchema(tableName: string) {
-    const result = this.db?.exec('SELECT sql from sqlite_schema WHERE name = $1', [tableName]);
+    if (!this.db) throw new Error('Database was not initialized on repository');
+    const result = this.db.exec('SELECT sql from sqlite_schema WHERE name = $1', [tableName]);
     if (!result) {
       console.warn(`No schema found for table ${tableName}`);
       return;
@@ -101,7 +148,8 @@ export class SQLiteRepository {
     try {
       const sql = await this.loadWasm();
       const dbArrayBuffer = await this.app.vault.adapter.readBinary(this.getFilePath(DATABASE_FILE_NAME));
-      return new sql.Database(Buffer.from(dbArrayBuffer));
+      this.db = new sql.Database(Buffer.from(dbArrayBuffer));
+      return this.db;
     } catch (e: unknown) {
       // TODO: properly handle errors
       if (e instanceof Error) {
