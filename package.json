@@ -3,9 +3,7 @@
 	"version": "0.0.1",
 	"description": "Leverage spaced repetition to incrementally build understanding and retain knowledge.",
 	"main": "main.js",
-	"files": [
-		"dist/**/*"
-	],
+	"type": "module",
 	"scripts": {
 		"dev": "node esbuild.config.mjs",
 		"build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
@@ -20,7 +18,7 @@
 	},
 	"devDependencies": {
 		"@types/node": "^16.11.6",
-		"@types/sql.js": "^1.4.9",
+		"@types/sql.js": "~1.4.9",
 		"@typescript-eslint/eslint-plugin": "5.29.0",
 		"@typescript-eslint/parser": "5.29.0",
 		"builtin-modules": "3.3.0",
