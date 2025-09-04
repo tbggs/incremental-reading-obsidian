@@ -1,5 +1,6 @@
-import { App, DataAdapter } from "obsidian";
-import initSqlJs, { BindParams, Database, QueryExecResult } from "sql.js";
+import { normalizePath, TFile, type App, type DataAdapter } from 'obsidian';
+import type { BindParams, Database, QueryExecResult } from 'sql.js';
+import initSqlJs from 'sql.js';
 import { pluginId, WASM_FILE_NAME, DATABASE_FILE_NAME, SCHEMA_FILE_PATH } from './constants';
 // import wasm from 'sql-wasm.wasm';
 
@@ -22,29 +23,22 @@ export class SQLiteRepository {
     const repo = new SQLiteRepository(app);
     // load the database file or create it if loading fails
     // TODO: handle failed loads when the file exists
-    await repo.loadDb() ?? await repo.initDb();
+    // await repo.loadDb() ?? await repo.initDb(); // TODO: uncomment for production
+    await repo.initDb(); // TODO: remove for production
     return repo;
   }
 
   /**
    * Execute a read query and return an array of objects corresponding to table rows
    *  TODO:
-   * - verify this works on all tables, with inner and outer JOINs, etc
    * - handle errors better?
    * @param query
-   * @returns an array where each top-level element is the result of a query
+   * @returns an array of rows
    */
   async query(query: string, params?: BindParams) {
-    const result = this.db.exec(query, params);
-    if (!result) return null;
-
-    // in SQL.js, selected rows are returned in form [{ columns: string[], values: Array<SQLValue[]> }]
-    const formatted = this.formatResult(result[0]);
-
-    console.log('query result:');
-    console.table(formatted);
-
-    return formatted;
+    const result = await this.execSql(query, params);
+    console.log({ result });
+    return result;
   }
 
   /**
@@ -52,14 +46,14 @@ export class SQLiteRepository {
    *  TODO:
    * - handle errors better?
    * @param query
-   * @returns an array where each top-level element is the result of a query
+   * @returns an array of rows
    */
   async mutate(query: string, params?: BindParams) {
-    const result = this.db.exec(query, params);
-    if (!result) return null;
-
-    await this.save();
+    const result = await this.execSql(query, params);
     console.log('mutation result: ', result);
+    if (result) { 
+      await this.save(); 
+    }
     return result;
   }
 
@@ -73,15 +67,16 @@ export class SQLiteRepository {
    * @param query
    * @returns an array where each top-level element is the result of a query
    */
-  async execSql(query: string, params?: BindParams, isMutation = false) {
+  private async execSql(query: string, params?: BindParams) {
     const result = this.db.exec(query, params);
+    console.log('execSql result:', result);
     if (!result) return null;
-    if (isMutation) await this.save();
+    if (!result.length) return result;
 
     // in SQL.js, selected rows are returned in form [{ columns: string[], values: Array<SQLValue[]> }]
     const formatted = result.map(this.formatResult);
 
-    console.log({ execResult: result });
+    console.log(`execSql rows:`);
     console.table(formatted);
 
     return formatted;
@@ -184,6 +179,6 @@ export class SQLiteRepository {
 
     // console.log({ pathSegments });
     const basePath = pathSegments.join('/');
-    return basePath;
+    return normalizePath(basePath);
   }
 }
