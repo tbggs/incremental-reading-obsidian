@@ -107,11 +107,11 @@ export default class MyPlugin extends Plugin {
 				const myQuery = `INSERT INTO extract (source, reference, next_review) ` +
 												`VALUES ($1, $2, $3)`;
 
-				const result = await repo.query(myQuery, [source, reference, nextReview]);
+				const result = await repo.mutate(myQuery, [source, reference, nextReview]);
 				return result;
 			}
 
-			const result = await executeExampleQuery(source, reference, nextReview);
+			// const result = await executeExampleQuery(source, reference, nextReview);
       const fetchQuery = 'SELECT rowid, * FROM extract';
       const fetchResult = await repo.query(fetchQuery);
 		});
