@@ -56,8 +56,8 @@ export function sanitizeForTitle(text: string, checkFinalChar: boolean) {
     .split('')
     .filter(
       (char, i) =>
-        !FORBIDDEN_TITLE_CHARS.has(char) && !checkFinalChar ||
-        (i !== text.length - 1 || !' .'.includes(char))
+        !FORBIDDEN_TITLE_CHARS.has(char) && (!checkFinalChar ||
+        (i !== text.length - 1 || !' .'.includes(char)))
     )
     .join('');
 }
@@ -96,3 +96,8 @@ export function createTitle(content?: string) {
   segments.push(time, generateId());
   return segments.join(TITLE_SEGMENT_SEPARATOR);
 }
+
+export const isInteger = (value: unknown): value is number => 
+  typeof value === 'number' && 
+  !Number.isNaN(value) && 
+  value % 1 === 0;
