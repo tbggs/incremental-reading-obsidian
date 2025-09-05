@@ -1,0 +1,8 @@
+.prettierignore
+
+README.md
+LICENSE
+
+# Ignore artifacts:
+build
+coverage
