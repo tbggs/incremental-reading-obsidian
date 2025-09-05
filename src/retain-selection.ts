@@ -1,57 +1,99 @@
-import { App, Editor } from "obsidian";
-
-const SNIPPET_DIRECTORY = '.il';
-const SNIPPET_TAG = 'il-text-snippet';
-const SOURCE_PROPERTY_NAME = 'il-source';
-
-
-const formatFrontMatter = (properties: Record<string, string>): string => {
-  const stringEntries = Object.entries(properties).map(([key, value]) => `${key}: ${value}`);
-  const formatted = '---\n' + stringEntries.join('\n') + '---\n';
-  return formatted;
-};
+import type { MarkdownView } from 'obsidian';
+import { normalizePath, type App, type Editor } from 'obsidian';
+import {
+  SNIPPET_TAG,
+  SNIPPET_DIRECTORY,
+  SOURCE_PROPERTY_NAME,
+  SNIPPET_CREATED_NOTICE_SLICE_LENGTH,
+  MS_PER_DAY,
+} from './lib/constants';
+import { createFile, createTitle, getContentSlice } from './lib/utils';
+import type QueryComposer from './db/QueryComposer';
 
 /**
  * Save the selected text and add it to the learning queue
  *
  * todo:
- * - handle edge cases
- * - show flash messages
+ * - handle edge cases (uncommon characters, leading/trailing spaces, )
+ * - show flash messages confirming creation
  * - selections from web viewer
  * - selections from native PDF viewer
  */
-export async function retainSelection(editor: Editor, app: App) {
-  const { vault, workspace } = app;
-
+export async function retainSelection(
+  editor: Editor,
+  view: MarkdownView,
+  app: App,
+  db: QueryComposer
+) {
   // TODO: this returns the most recently active file if the current file is not a FileView.
   // this may result in bugs - check if currently in a FileView beforehand
   // https://docs.obsidian.md/Reference/TypeScript+API/Workspace/getActiveFile
-  const currentFile = workspace.getActiveFile();
-  if (!currentFile) {
+  // const currentFile = workspace.getActiveFile();
+
+  // const currentView = app.workspace.getActiveViewOfType(MarkdownView);
+
+  if (!view.file) {
     // TODO: show a flash error
+    new Notice(`A markdown file must be active to make a snippet`);
     return;
   }
 
-  const selection = editor.getSelection();
+  const selection = view.getSelection();
 
   // format the data as applicable
-  // Tag it with il-text-snippet, source to point to the source file, and date/time created
-  // TODO: handle disambiguation for files with non-unique names the way Obsidian does
-  const currentFileLink = `[${currentFile.name}]`;
   if (!selection) {
-    const errorMsg = "Retain failed: no text was selected";
-    // show a flash message
+    const errorMsg = 'Retain failed: no text was selected';
+    // TODO: verify this shows a flash message
+    new Notice(errorMsg);
   }
 
-  const properties = { tags: SNIPPET_TAG, 'il-source': `[[${currentFileLink}]]` };
+  // Create a new note
+  const snippetFileName = createTitle(selection);
+  const snippetPath = normalizePath(
+    `${SNIPPET_DIRECTORY}/${snippetFileName}.md`
+  );
+  const snippetFile = await createFile(snippetPath);
 
-  const formatted = formatFrontMatter(properties) + selection;
-  const selectionStart = selection.slice(0, 20);
-  const time = new Date(Date.now());
-  const fileName = selectionStart + time;
+  // Tag it with il-text-snippet, source to point to the source file, and date/time created
+  // TODO: handle disambiguation for files with non-unique names the way Obsidian does
+  const sourceLink = app.fileManager.generateMarkdownLink(
+    view.file,
+    snippetFile.path,
+    undefined,
+    view.file.basename
+  );
 
-  // Create a new note in the .il folder
-  // TODO: If the folder doesn't exist, create it
-  const newNote = await vault.create(`/${SNIPPET_DIRECTORY}/${fileName}.md`, formatted);
+  app.fileManager.processFrontMatter(snippetFile, (frontmatter) => {
+    Object.assign(frontmatter, {
+      tags: SNIPPET_TAG,
+      [`${SOURCE_PROPERTY_NAME}`]: sourceLink,
+    });
+  });
+  await app.vault.append(snippetFile, selection);
   // TODO: Add to the database
+  const result = await db
+    .insert('snippet')
+    .columns('reference', 'next_review')
+    .values({
+      reference: snippetFile.name,
+      next_review: Date.now() + MS_PER_DAY,
+    })
+    .execute();
+
+  // await repo.mutate(
+  //   `INSERT INTO snippet (reference, next_review) VALUES ($1, $2)`,
+  //   [snippetFile.name, Date.now() + MS_PER_DAY]
+  // );
+  const slice = getContentSlice(
+    selection,
+    SNIPPET_CREATED_NOTICE_SLICE_LENGTH,
+    true
+  );
+  if (result) {
+    new Notice(`snippet created: ${slice}`);
+  } else {
+    new Notice(`Failed to save snippet to database: ${slice}`);
+  }
+
+  return result;
 }

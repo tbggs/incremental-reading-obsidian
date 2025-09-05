@@ -1,164 +1,212 @@
 import type { App, Editor, MarkdownView } from 'obsidian';
-import { addIcon, Modal, Notice, Plugin, PluginSettingTab, Setting } from 'obsidian';
+import {
+  addIcon,
+  Modal,
+  Notice,
+  Plugin,
+  PluginSettingTab,
+  Setting,
+} from 'obsidian';
+import {
+  DATABASE_FILE_PATH,
+  ERROR_NOTICE_DURATION_MS,
+  MS_PER_DAY,
+  SCHEMA_FILE_PATH,
+} from './lib/constants';
+import { SQLiteRepository } from './db/repository';
+import QueryComposer from './db/QueryComposer';
 import { retainSelection } from 'src/retain-selection';
-import { SQLiteRepository } from './lib/repository';
 
 // Remember to rename these classes and interfaces!
 
 interface MyPluginSettings {
-	mySetting: string;
+  mySetting: string;
 }
 
 const DEFAULT_SETTINGS: MyPluginSettings = {
-	mySetting: 'default'
-}
+  mySetting: 'default',
+};
 
 export default class MyPlugin extends Plugin {
-	settings: MyPluginSettings;
-  repo?: SQLiteRepository;
+  settings: MyPluginSettings;
+  #db: QueryComposer;
 
-	async onload() {
-		await this.loadSettings();
+  async onload() {
+    await this.loadSettings();
 
-		// This creates an icon in the left ribbon.
-		// TODO: replace the placeholder
-		const ribbonIconEl = this.addRibbonIcon('lightbulb', 'Incremental Learning', (evt: MouseEvent) => {
-			// Called when the user clicks the icon.
-			new Notice('This is a notice!');
-		});
-		// Perform additional things with the ribbon
-		ribbonIconEl.addClass('incremental-learning-ribbon');
+    // This creates an icon in the left ribbon.
+    // TODO: replace the placeholder
+    const ribbonIconEl = this.addRibbonIcon(
+      'lightbulb',
+      'Incremental Learning',
+      (evt: MouseEvent) => {
+        // Called when the user clicks the icon.
+        new Notice('This is a notice!');
+      }
+    );
+    // Perform additional things with the ribbon
+    ribbonIconEl.addClass('incremental-learning-ribbon');
 
-		// TODO: show counts of cards and extracts in queue?
-		// // This adds a status bar item to the bottom of the app. Does not work on mobile apps.
-		// const statusBarItemEl = this.addStatusBarItem();
-		// statusBarItemEl.setText('Status Bar Text');
+    // TODO: show counts of cards and snippets in queue?
+    // // This adds a status bar item to the bottom of the app. Does not work on mobile apps.
+    // const statusBarItemEl = this.addStatusBarItem();
+    // statusBarItemEl.setText('Status Bar Text');
 
-		this.addCommand({
-			id: 'retain-selection',
-			name: 'retain selection',
-			hotkeys: [
-				{
-					modifiers: ['Alt'],
-					key: 'X',
-				}
-			], // TODO: add setting to customize
-			editorCallback: (editor: Editor, view: MarkdownView) => {
-				return retainSelection(editor, view, this.app);
-			}
-		});
+    this.addCommand({
+      id: 'retain-selection',
+      name: 'retain selection',
+      hotkeys: [
+        {
+          modifiers: ['Alt'],
+          key: 'X',
+        },
+      ], // TODO: add setting to customize
+      editorCallback: (editor: Editor, view: MarkdownView) => {
+        if (!this.#db) {
+          new Notice(`SQLite database still loading`);
+          return;
+        }
+        return retainSelection(editor, view, this.app, this.#db);
+      },
+    });
 
-		this.addCommand({
-			id: 'list-extracts',
-			name: 'list extracts',
-			callback: async () => {
-				const rows = await this.repo?.query('SELECT rowid, * FROM extract');
-				rows && console.table(rows.map((row) => ({ ...row, next_review: new Date(row.next_review).toUTCString(), dismissed: Boolean(row.dismissed) })));
-			}
-		});
+    this.addCommand({
+      id: 'list-snippets',
+      name: 'list snippets',
+      callback: async () => {
+        const rows = await this.#db.select('snippet').execute();
 
-		// TODO: set up UI modal
-		// // This adds a complex command that can check whether the current state of the app allows execution of the command
-		// this.addCommand({
-		// 	id: 'open-sample-modal-complex',
-		// 	name: 'Open sample modal (complex)',
-		// 	checkCallback: (checking: boolean) => {
-		// 		// Conditions to check
-		// 		const markdownView = this.app.workspace.getActiveViewOfType(MarkdownView);
-		// 		if (markdownView) {
-		// 			// If checking is true, we're simply "checking" if the command can be run.
-		// 			// If checking is false, then we want to actually perform the operation.
-		// 			if (!checking) {
-		// 				new SampleModal(this.app).open();
-		// 			}
+        // await this.repo?.query('SELECT rowid, * FROM snippet');
+        if (!rows) return;
+        console.table(
+          rows.map((row) => ({
+            ...row,
+            next_review: row.next_review
+              ? new Date(row.next_review).toUTCString()
+              : null,
+            dismissed: Boolean(row.dismissed),
+          }))
+        );
+      },
+    });
 
-		// 			// This command will only show up in Command Palette when the check function returns true
-		// 			return true;
-		// 		}
-		// 	}
-		// });
+    // TODO: set up UI modal
+    // // This adds a complex command that can check whether the current state of the app allows execution of the command
+    // this.addCommand({
+    // 	id: 'open-sample-modal-complex',
+    // 	name: 'Open sample modal (complex)',
+    // 	checkCallback: (checking: boolean) => {
+    // 		// Conditions to check
+    // 		const markdownView = this.app.workspace.getActiveViewOfType(MarkdownView);
+    // 		if (markdownView) {
+    // 			// If checking is true, we're simply "checking" if the command can be run.
+    // 			// If checking is false, then we want to actually perform the operation.
+    // 			if (!checking) {
+    // 				new SampleModal(this.app).open();
+    // 			}
 
-		// This adds a settings tab so the user can configure various aspects of the plugin
-		this.addSettingTab(new SampleSettingTab(this.app, this));
+    // 			// This command will only show up in Command Palette when the check function returns true
+    // 			return true;
+    // 		}
+    // 	}
+    // });
 
-		// // If the plugin hooks up any global DOM events (on parts of the app that doesn't belong to this plugin)
-		// // Using this function will automatically remove the event listener when this plugin is disabled.
-		// this.registerDomEvent(document, 'click', (evt: MouseEvent) => {
-		// 	console.log('click', evt);
-		// });
+    // This adds a settings tab so the user can configure various aspects of the plugin
+    this.addSettingTab(new SampleSettingTab(this.app, this));
 
-		// // When registering intervals, this function will automatically clear the interval when the plugin is disabled.
-		// this.registerInterval(window.setInterval(() => console.log('setInterval'), 5 * 60 * 1000));
+    // // If the plugin hooks up any global DOM events (on parts of the app that doesn't belong to this plugin)
+    // // Using this function will automatically remove the event listener when this plugin is disabled.
+    // this.registerDomEvent(document, 'click', (evt: MouseEvent) => {
+    // 	console.log('click', evt);
+    // });
 
+    // // When registering intervals, this function will automatically clear the interval when the plugin is disabled.
+    // this.registerInterval(window.setInterval(() => console.log('setInterval'), 5 * 60 * 1000));
 
-		this.app.workspace.onLayoutReady(async () => {
-			// expensive startup operations should go here
+    this.app.workspace.onLayoutReady(async () => {
+      // expensive startup operations should go here
 
       // const currentView = this.app.workspace.getActiveViewOfType(MarkdownView);
       // const currentDoc = currentView?.file;
       // console.log({ currentDoc, currentFile });
-			const repo = await SQLiteRepository.start(this.app);
-      this.repo = repo;
-      const currentFile = this.app.workspace.getActiveFile();
+      const repo = await SQLiteRepository.start(
+        this.app,
+        DATABASE_FILE_PATH,
+        SCHEMA_FILE_PATH
+      );
+      this.#db = new QueryComposer(repo);
 
-      if (!currentFile) {
-        console.warn('no doc open!');
-        return;
-      }
+      // listen for snippet creations
+      this.app.vault.on('create', async (file) => {
+        // check if the snippet is in the database already
+        const result = await this.#db.select('snippet').columns('id').execute();
+        // await repo.query(
+        //   `SELECT (id) FROM snippet WHERE reference = $1`,
+        //   [file.name]
+        // );
+        // TODO: handle failed fetches differently from no results
+        if (!result) {
+          new Notice(`Failed to fetch rows`, ERROR_NOTICE_DURATION_MS);
+          return;
+        } else if (result.length === 0) {
+          // insert a new snippet row
+          await repo.mutate(
+            `INSERT INTO snippet (reference, next_review) VALUES ($1, $2)`,
+            [file.name, Date.now() + MS_PER_DAY]
+          );
+        } else {
+          // if so, set dismissed to 0
+        }
+      });
+      // const executeExampleQuery = async (reference: string, nextReview: number) => {
+      // 	const myQuery = `INSERT INTO snippet (reference, next_review) ` +
+      // 									`VALUES ($1, $2)`;
 
-			const source = 'https://help.supermemo.org/wiki/Incremental_learning';
-			const reference = `extracts/${currentFile.name}`; // TODO: get the path to the new file
-			const nextReview = Date.now() + 86400 * 1000; // a day ahead
+      // 	const result = await repo.mutate(myQuery, [reference, nextReview]);
+      // 	return result;
+      // }
 
-			const executeExampleQuery = async (source: string, reference: string, nextReview: number) => {
-				const myQuery = `INSERT INTO extract (source, reference, next_review) ` +
-												`VALUES ($1, $2, $3)`;
-
-				const result = await repo.mutate(myQuery, [source, reference, nextReview]);
-				return result;
-			}
-
-			// const result = await executeExampleQuery(source, reference, nextReview);
-      const fetchQuery = 'SELECT rowid, * FROM extract';
+      // const result = await executeExampleQuery(source, reference, nextReview);
+      const fetchQuery = 'SELECT * FROM snippet';
       const fetchResult = await repo.query(fetchQuery);
-		});
-	}
+    });
+  }
 
-	onunload() {
+  onunload() {}
 
-	}
+  async loadSettings() {
+    this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+  }
 
-	async loadSettings() {
-		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
-	}
-
-	async saveSettings() {
-		await this.saveData(this.settings);
-	}
+  async saveSettings() {
+    await this.saveData(this.settings);
+  }
 }
 
 class SampleSettingTab extends PluginSettingTab {
-	plugin: MyPlugin;
+  plugin: MyPlugin;
 
-	constructor(app: App, plugin: MyPlugin) {
-		super(app, plugin);
-		this.plugin = plugin;
-	}
+  constructor(app: App, plugin: MyPlugin) {
+    super(app, plugin);
+    this.plugin = plugin;
+  }
 
-	display(): void {
-		const {containerEl} = this;
+  display(): void {
+    const { containerEl } = this;
 
-		containerEl.empty();
+    containerEl.empty();
 
-		new Setting(containerEl)
-			.setName('Setting #1')
-			.setDesc('It\'s a secret')
-			.addText(text => text
-				.setPlaceholder('Enter your secret')
-				.setValue(this.plugin.settings.mySetting)
-				.onChange(async (value) => {
-					this.plugin.settings.mySetting = value;
-					await this.plugin.saveSettings();
-				}));
-	}
+    new Setting(containerEl)
+      .setName('Setting #1')
+      .setDesc("It's a secret")
+      .addText((text) =>
+        text
+          .setPlaceholder('Enter your secret')
+          .setValue(this.plugin.settings.mySetting)
+          .onChange(async (value) => {
+            this.plugin.settings.mySetting = value;
+            await this.plugin.saveSettings();
+          })
+      );
+  }
 }

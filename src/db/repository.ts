@@ -1,7 +1,8 @@
 import { normalizePath, TFile, type App, type DataAdapter } from 'obsidian';
 import type { BindParams, Database, QueryExecResult } from 'sql.js';
 import initSqlJs from 'sql.js';
-import { pluginId, WASM_FILE_NAME, DATABASE_FILE_NAME, SCHEMA_FILE_PATH } from './constants';
+import { pluginId, WASM_FILE_NAME } from '../lib/constants';
+import type { Primitive } from '../lib/utility-types';
 // import wasm from 'sql-wasm.wasm';
 
 // console.log({wasmType: typeof wasm});
@@ -10,21 +11,34 @@ export class SQLiteRepository {
   app: App;
   adapter: DataAdapter;
   db: Database;
+  #dbFilePath: string;
+  #schemaFilePath: string;
 
-  private constructor(app: App) {
+  /**
+   * Use .start to initialize instead
+   */
+  private constructor(app: App, dbFilePath: string, schemaFilePath: string) {
     this.app = app;
     this.adapter = app.vault.adapter;
+    this.#dbFilePath = dbFilePath;
+    this.#schemaFilePath = schemaFilePath;
   }
 
   /**
    * Asynchronous factory function
+   * @param dbFilePath the path of the database file relative to the plugin root
+   * @param schemaFilePath the path of the schema.sql file relative to the plugin root
    */
-  static async start(app: App): Promise<SQLiteRepository> {
-    const repo = new SQLiteRepository(app);
+  static async start(
+    app: App,
+    dbFilePath: string,
+    schemaFilePath: string
+  ): Promise<SQLiteRepository> {
+    const repo = new SQLiteRepository(app, dbFilePath, schemaFilePath);
     // load the database file or create it if loading fails
     // TODO: handle failed loads when the file exists
-    // await repo.loadDb() ?? await repo.initDb(); // TODO: uncomment for production
-    await repo.initDb(); // TODO: remove for production
+    (await repo.loadDb()) ?? (await repo.initDb()); // TODO: uncomment for production
+    // await repo.initDb(); // TODO: remove for production
     return repo;
   }
 
@@ -35,10 +49,10 @@ export class SQLiteRepository {
    * @param query
    * @returns an array of rows
    */
-  async query(query: string, params?: BindParams) {
+  async query(query: string, params: Primitive[] = []) {
     const result = await this.execSql(query, params);
     console.log({ result });
-    return result;
+    return result?.[0];
   }
 
   /**
@@ -48,13 +62,33 @@ export class SQLiteRepository {
    * @param query
    * @returns an array of rows
    */
-  async mutate(query: string, params?: BindParams) {
+  async mutate(query: string, params: Primitive[] = []) {
     const result = await this.execSql(query, params);
     console.log('mutation result: ', result);
-    if (result) { 
-      await this.save(); 
+    if (result) {
+      await this.save();
     }
     return result;
+  }
+
+  /**
+   * Converts params to SQLite-appropriate types
+   */
+  coerceParams(params: Primitive[]): BindParams {
+    return params.map((param) => {
+      switch (typeof param) {
+        case 'boolean':
+          return Number(param);
+        case 'symbol':
+          return param.toString();
+        case 'undefined':
+          return null;
+        case 'string':
+        case 'number':
+        case 'object':
+          return param;
+      }
+    });
   }
 
   /**
@@ -67,14 +101,14 @@ export class SQLiteRepository {
    * @param query
    * @returns an array where each top-level element is the result of a query
    */
-  private async execSql(query: string, params?: BindParams) {
-    const result = this.db.exec(query, params);
-    console.log('execSql result:', result);
-    if (!result) return null;
-    if (!result.length) return result;
+  async execSql(query: string, params: Primitive[] = []) {
+    const results = this.db.exec(query, this.coerceParams(params));
+    console.log('execSql result:', results);
+    // if (!results) return null;
+    if (!results || !results.length) return [];
 
     // in SQL.js, selected rows are returned in form [{ columns: string[], values: Array<SQLValue[]> }]
-    const formatted = result.map(this.formatResult);
+    const formatted = results.map(this.formatResult);
 
     console.log(`execSql rows:`);
     console.table(formatted);
@@ -88,7 +122,10 @@ export class SQLiteRepository {
   formatResult(result: QueryExecResult): Array<Record<string, string>> {
     const { columns, values } = result;
     const formattedEntries = values.map((row) => {
-      const output = row.reduce((acc, cell, i) => Object.assign(acc, { [columns[i]]: cell }), {});
+      const output = row.reduce(
+        (acc, cell, i) => Object.assign(acc, { [columns[i]]: cell }),
+        {}
+      );
 
       return output;
     });
@@ -102,7 +139,10 @@ export class SQLiteRepository {
   async save() {
     if (!this.db) throw new Error('Database was not initialized on repository');
     const data = this.db.export().buffer;
-    return this.app.vault.adapter.writeBinary(this.getFilePath(DATABASE_FILE_NAME), data);
+    return this.app.vault.adapter.writeBinary(
+      this.getFilePath(this.#dbFilePath),
+      data as ArrayBuffer
+    );
   }
 
   /**
@@ -112,7 +152,9 @@ export class SQLiteRepository {
   async initDb() {
     const sql = await this.loadWasm();
     this.db = new sql.Database();
-    const schema = await this.adapter.read(this.getFilePath(SCHEMA_FILE_PATH));
+    const schema = await this.adapter.read(
+      this.getFilePath(this.#schemaFilePath)
+    );
     this.db.exec(schema);
     await this.save();
     return this.db;
@@ -120,7 +162,10 @@ export class SQLiteRepository {
 
   async getSchema(tableName: string) {
     if (!this.db) throw new Error('Database was not initialized on repository');
-    const result = this.db.exec('SELECT sql from sqlite_schema WHERE name = $1', [tableName]);
+    const result = this.db.exec(
+      'SELECT sql from sqlite_schema WHERE name = $1',
+      [tableName]
+    );
     if (!result) {
       console.warn(`No schema found for table ${tableName}`);
       return;
@@ -142,7 +187,9 @@ export class SQLiteRepository {
   private async loadDb() {
     try {
       const sql = await this.loadWasm();
-      const dbArrayBuffer = await this.app.vault.adapter.readBinary(this.getFilePath(DATABASE_FILE_NAME));
+      const dbArrayBuffer = await this.app.vault.adapter.readBinary(
+        this.getFilePath(this.#dbFilePath)
+      );
       this.db = new sql.Database(Buffer.from(dbArrayBuffer));
       return this.db;
     } catch (e: unknown) {
@@ -158,7 +205,8 @@ export class SQLiteRepository {
   }
 
   private async loadWasm() {
-    const sql = await initSqlJs({ // TODO: handle throws
+    const sql = await initSqlJs({
+      // TODO: handle throws
       locateFile: (_file) => this.getFilePath(WASM_FILE_NAME, true),
     });
 
@@ -170,7 +218,7 @@ export class SQLiteRepository {
       this.app.vault.configDir,
       'plugins',
       pluginId,
-      fileName
+      fileName,
     ];
 
     if (absolute) {
