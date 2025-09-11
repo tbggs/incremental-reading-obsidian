@@ -1,4 +1,4 @@
-import QueryComposer from 'src/db/QueryComposer';
+import QueryComposer from 'src/db/query-composer/QueryComposer';
 import { describe, it, expect } from 'vitest';
 
 describe('Query Composer', () => {

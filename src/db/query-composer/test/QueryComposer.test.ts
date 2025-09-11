@@ -1,4 +1,4 @@
-import QueryComposer from 'src/db/QueryComposer';
+import QueryComposer from 'src/db/query-composer/QueryComposer';
 import { SQLiteRepository } from 'src/db/repository';
 import { MS_PER_DAY } from 'src/lib/constants';
 import { describe, it, expect } from 'vitest';

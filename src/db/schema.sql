@@ -1,5 +1,5 @@
 CREATE TABLE IF NOT EXISTS snippet (
-  id INTEGER NOT NULL PRIMARY KEY, -- alias for rowid
+  id TEXT NOT NULL, -- UUID
   -- source TEXT NOT NULL, -- use source property in the snippet instead so Obsidian updates it properly
   reference TEXT NOT NULL UNIQUE, -- pointer to the snippet's location in the vault
   next_review INTEGER, -- unix timestamp
@@ -9,8 +9,7 @@ CREATE TABLE IF NOT EXISTS snippet (
 
 -- Log of all snippet reviews
 CREATE TABLE IF NOT EXISTS snippet_review (
-  id INTEGER NOT NULL PRIMARY KEY,
-  snippet_id number REFERENCES snippet(rowid),
+  id TEXT NOT NULL, -- UUID
+  snippet_id TEXT REFERENCES snippet(id),
   review_time INTEGER NOT NULL,
-  reference TEXT NOT NULL
 );

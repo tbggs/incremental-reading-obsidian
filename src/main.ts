@@ -14,7 +14,7 @@ import {
   SCHEMA_FILE_PATH,
 } from './lib/constants';
 import { SQLiteRepository } from './db/repository';
-import QueryComposer from './db/QueryComposer';
+import QueryComposer from './db/query-composer/QueryComposer';
 import { retainSelection } from 'src/retain-selection';
 
 // Remember to rename these classes and interfaces!
@@ -138,25 +138,25 @@ export default class MyPlugin extends Plugin {
 
       // listen for snippet creations
       this.app.vault.on('create', async (file) => {
-        // check if the snippet is in the database already
-        const result = await this.#db.select('snippet').columns('id').execute();
-        // await repo.query(
-        //   `SELECT (id) FROM snippet WHERE reference = $1`,
-        //   [file.name]
-        // );
-        // TODO: handle failed fetches differently from no results
-        if (!result) {
-          new Notice(`Failed to fetch rows`, ERROR_NOTICE_DURATION_MS);
-          return;
-        } else if (result.length === 0) {
-          // insert a new snippet row
-          await repo.mutate(
-            `INSERT INTO snippet (reference, next_review) VALUES ($1, $2)`,
-            [file.name, Date.now() + MS_PER_DAY]
-          );
-        } else {
-          // if so, set dismissed to 0
-        }
+        // // check if the snippet is in the database already
+        // const result = await this.#db.select('snippet').columns('id').execute();
+        // // await repo.query(
+        // //   `SELECT (id) FROM snippet WHERE reference = $1`,
+        // //   [file.name]
+        // // );
+        // // TODO: handle failed fetches differently from no results
+        // if (!result) {
+        //   new Notice(`Failed to fetch rows`, ERROR_NOTICE_DURATION_MS);
+        //   return;
+        // } else if (result.length === 0) {
+        //   // insert a new snippet row
+        //   await repo.mutate(
+        //     `INSERT INTO snippet (reference, next_review) VALUES ($1, $2)`,
+        //     [file.name, Date.now() + MS_PER_DAY]
+        //   );
+        // } else {
+        //   // if so, set dismissed to 0
+        // }
       });
       // const executeExampleQuery = async (reference: string, nextReview: number) => {
       // 	const myQuery = `INSERT INTO snippet (reference, next_review) ` +

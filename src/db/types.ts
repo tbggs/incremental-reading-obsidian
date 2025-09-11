@@ -9,17 +9,16 @@ import type { TABLE_NAMES } from '../lib/constants';
 // }
 
 export interface Snippet {
-  id?: number;
+  id: string;
   reference: string;
   next_review: number | null;
   dismissed?: boolean;
 }
 
 export interface SnippetReview {
-  id: number;
-  snippet_id: number;
+  id: string;
+  snippet_id: string;
   review_time: number; // Unix timestamp
-  reference: string;
 }
 
 export type TableName = (typeof TABLE_NAMES)[number];
