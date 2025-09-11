@@ -4,11 +4,11 @@ import {
   SNIPPET_TAG,
   SNIPPET_DIRECTORY,
   SOURCE_PROPERTY_NAME,
-  SNIPPET_CREATED_NOTICE_SLICE_LENGTH,
+  SNIPPET_SLICE_LENGTH,
   MS_PER_DAY,
 } from './lib/constants';
 import { createFile, createTitle, getContentSlice } from './lib/utils';
-import type QueryComposer from './db/QueryComposer';
+import type QueryComposer from './db/query-composer/QueryComposer';
 
 /**
  * Save the selected text and add it to the learning queue
@@ -63,7 +63,7 @@ export async function retainSelection(
     view.file.basename
   );
 
-  app.fileManager.processFrontMatter(snippetFile, (frontmatter) => {
+  await app.fileManager.processFrontMatter(snippetFile, (frontmatter) => {
     Object.assign(frontmatter, {
       tags: SNIPPET_TAG,
       [`${SOURCE_PROPERTY_NAME}`]: sourceLink,
@@ -71,24 +71,24 @@ export async function retainSelection(
   });
   await app.vault.append(snippetFile, selection);
   // TODO: Add to the database
+  console.log('inserting into database');
   const result = await db
     .insert('snippet')
     .columns('reference', 'next_review')
     .values({
       reference: snippetFile.name,
       next_review: Date.now() + MS_PER_DAY,
+      // last_review: 0, // invalid prop for testing
     })
     .execute();
+
+  console.log('insert result:', result);
 
   // await repo.mutate(
   //   `INSERT INTO snippet (reference, next_review) VALUES ($1, $2)`,
   //   [snippetFile.name, Date.now() + MS_PER_DAY]
   // );
-  const slice = getContentSlice(
-    selection,
-    SNIPPET_CREATED_NOTICE_SLICE_LENGTH,
-    true
-  );
+  const slice = getContentSlice(selection, SNIPPET_SLICE_LENGTH, true);
   if (result) {
     new Notice(`snippet created: ${slice}`);
   } else {

@@ -1,12 +1,17 @@
 // Card, Snippet, ReviewLog, FSRSParameters
-import type { Card } from 'ts-fsrs';
+import type { Card, FSRSReview } from 'ts-fsrs';
 import { FSRSParameters } from 'ts-fsrs';
 import type { TABLE_NAMES } from '../lib/constants';
 
-// export interface SRSCard extends Card {
-//   id: number;
-//   blockId: string;
-// }
+export interface SRSCard extends Card {
+  id: string;
+  reference: string;
+}
+
+export interface SRSCardReview extends FSRSReview {
+  id: string;
+  card_id: string;
+}
 
 export interface Snippet {
   id: string;

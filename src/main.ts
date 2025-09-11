@@ -16,6 +16,7 @@ import {
 import { SQLiteRepository } from './db/repository';
 import QueryComposer from './db/query-composer/QueryComposer';
 import { retainSelection } from 'src/retain-selection';
+import ReviewManager from './lib/ReviewManager';
 
 // Remember to rename these classes and interfaces!
 
@@ -30,6 +31,7 @@ const DEFAULT_SETTINGS: MyPluginSettings = {
 export default class MyPlugin extends Plugin {
   settings: MyPluginSettings;
   #db: QueryComposer;
+  #reviewManager: ReviewManager;
 
   async onload() {
     await this.loadSettings();
@@ -66,7 +68,8 @@ export default class MyPlugin extends Plugin {
           new Notice(`SQLite database still loading`);
           return;
         }
-        return retainSelection(editor, view, this.app, this.#db);
+        return this.#reviewManager.createSnippet(view);
+        // return retainSelection(editor, view, this.app, this.#db);
       },
     });
 
@@ -77,7 +80,36 @@ export default class MyPlugin extends Plugin {
         const rows = await this.#db.select('snippet').execute();
 
         // await this.repo?.query('SELECT rowid, * FROM snippet');
+        if (!rows) {
+          console.log('No snippets found');
+          return;
+        }
+        console.table(
+          rows.map((row) => ({
+            ...row,
+            next_review: row.next_review
+              ? new Date(row.next_review).toUTCString()
+              : null,
+            dismissed: Boolean(row.dismissed),
+          }))
+        );
+      },
+    });
+
+    this.addCommand({
+      // TODO: remove after done testing
+      id: 'delete-all-snippets',
+      name: 'DELETE all snippets',
+      callback: async () => {
+        const deleteResult = await this.#db.delete('snippet').execute();
+        const rows = await this.#db.select('snippet').execute();
+
+        // await this.repo?.query('SELECT rowid, * FROM snippet');
         if (!rows) return;
+        new Notice(
+          `Failed to delete all snippets from database!`,
+          ERROR_NOTICE_DURATION_MS
+        );
         console.table(
           rows.map((row) => ({
             ...row,
@@ -135,6 +167,7 @@ export default class MyPlugin extends Plugin {
         SCHEMA_FILE_PATH
       );
       this.#db = new QueryComposer(repo);
+      this.#reviewManager = new ReviewManager(this.app, repo);
 
       // listen for snippet creations
       this.app.vault.on('create', async (file) => {

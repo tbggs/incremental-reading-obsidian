@@ -20,7 +20,7 @@ export const SUCCESS_NOTICE_DURATION_MS = 4000;
 /** characters that should never be permitted in note titles */
 export const FORBIDDEN_TITLE_CHARS = new Set(`#^[]|*"\\/<>:?`.split(''));
 export const CONTENT_TITLE_SLICE_LENGTH = 25;
-export const SNIPPET_CREATED_NOTICE_SLICE_LENGTH = 30;
+export const SNIPPET_SLICE_LENGTH = 30;
 
 export const MS_PER_DAY = 1000 * 86_400;
 
@@ -29,3 +29,5 @@ export const TABLE_NAMES = Object.freeze([
   'snippet',
   'snippet_review',
 ] as const);
+
+export const SNIPPET_FALLBACK_REVIEW_INTERVAL = MS_PER_DAY * 1;
