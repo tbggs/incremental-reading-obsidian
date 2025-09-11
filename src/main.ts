@@ -10,12 +10,10 @@ import {
 import {
   DATABASE_FILE_PATH,
   ERROR_NOTICE_DURATION_MS,
-  MS_PER_DAY,
   SCHEMA_FILE_PATH,
 } from './lib/constants';
 import { SQLiteRepository } from './db/repository';
 import QueryComposer from './db/query-composer/QueryComposer';
-import { retainSelection } from 'src/retain-selection';
 import ReviewManager from './lib/ReviewManager';
 
 // Remember to rename these classes and interfaces!
