@@ -75,7 +75,7 @@ export default class ReviewManager {
     } catch (error) {}
   }
 
-  protected async createFile({
+  protected async createNote({
     content,
     frontmatterObj,
     fileName,
@@ -89,8 +89,8 @@ export default class ReviewManager {
     try {
       const fullPath = normalizePath(`${directory}/${fileName}`);
       const file = await createFile(fullPath);
-      frontmatterObj && (await this.updateFrontMatter(file, frontmatterObj));
       await this.app.vault.append(file, content);
+      frontmatterObj && (await this.updateFrontMatter(file, frontmatterObj));
       return file;
     } catch (error) {
       console.error(error);
@@ -116,6 +116,55 @@ export default class ReviewManager {
     } else {
       await this.app.vault.append(file, update);
     }
+  }
+
+  /**
+   * Shared logic for creating snippets and cards
+   */
+  protected async createFromSelection(view: MarkdownView, directory: string) {
+    // TODO: verify `view.file` can't change between the function invocation and assignment to `currentFile`
+    if (!view.file) {
+      new Notice(`A markdown file must be active`, ERROR_NOTICE_DURATION_MS);
+      return;
+    }
+
+    const selection = view.getSelection();
+    if (!selection) {
+      new Notice('Text must be selected', ERROR_NOTICE_DURATION_MS);
+      return;
+    }
+
+    const newNoteName = createTitle(selection);
+    const newNote = await this.createNote({
+      content: selection,
+      fileName: `${newNoteName}.md`,
+      directory,
+    });
+
+    if (!newNote) {
+      const errorMsg = `Failed to create note "${newNoteName}"`;
+      // new Notice(errorMsg);
+      // return;
+      throw new Error(errorMsg);
+    }
+
+    return newNote;
+  }
+
+  /**
+   * Generates a link with an absolute path and the file name as alias
+   */
+  generateMarkdownLink(
+    fileLinkedTo: TFile,
+    fileContainingLink: TFile,
+    subpath?: string
+  ) {
+    return this.app.fileManager.generateMarkdownLink(
+      fileLinkedTo,
+      fileContainingLink.path,
+      subpath,
+      fileLinkedTo.basename
+    );
   }
 
   protected async updateFrontMatter(file: TFile, updates: Record<string, any>) {
@@ -162,42 +211,16 @@ export default class ReviewManager {
    * - selections from native PDF viewer
    */
   async createSnippet(view: MarkdownView) {
-    // TODO: verify `view.file` can't change between the function invocation and assignment to `currentFile`
     if (!view.file) {
-      new Notice(
-        `A markdown file must be active to make a snippet`,
-        ERROR_NOTICE_DURATION_MS
-      );
+      new Notice(`A markdown file must be active`, ERROR_NOTICE_DURATION_MS);
       return;
     }
 
     const currentFile = view.file;
-    const selection = view.getSelection();
-    if (!selection) {
-      new Notice(
-        'Retain failed: no text was selected',
-        ERROR_NOTICE_DURATION_MS
-      );
-      return;
-    }
-
-    const snippetFileName = createTitle(selection);
-    const snippetFile = await this.createFile({
-      content: selection,
-      fileName: `${snippetFileName}.md`,
-      directory: SNIPPET_DIRECTORY,
-    });
-
-    const slice = getContentSlice(selection, SNIPPET_SLICE_LENGTH, true);
-    if (!snippetFile) {
-      const errorMsg = `Failed to create note "${slice}"`;
-      // new Notice(errorMsg);
-      // return;
-      throw new Error(errorMsg);
-    }
+    const snippetFile = await this.createFromSelection(view, SNIPPET_DIRECTORY);
+    if (!snippetFile) return;
 
     // Tag it with 'il-text-snippet' and link to the source file
-    // TODO: handle disambiguation for files with non-unique names the way Obsidian does
     const sourceLink = this.app.fileManager.generateMarkdownLink(
       currentFile,
       snippetFile.path,
@@ -209,8 +232,6 @@ export default class ReviewManager {
       tags: SNIPPET_TAG,
       [`${SOURCE_PROPERTY_NAME}`]: sourceLink,
     });
-
-    await this.app.vault.append(snippetFile, selection);
 
     try {
       // save the snippet to the database
@@ -224,11 +245,14 @@ export default class ReviewManager {
         .execute();
 
       // TODO: verify this correctly catches failed inserts
-      new Notice(`snippet created: ${slice}`, SUCCESS_NOTICE_DURATION_MS);
+      new Notice(
+        `snippet created: ${snippetFile.basename}`,
+        SUCCESS_NOTICE_DURATION_MS
+      );
       return result;
     } catch (error) {
       new Notice(
-        `Failed to save snippet to database: ${slice}`,
+        `Failed to save snippet to database: ${snippetFile.basename}`,
         ERROR_NOTICE_DURATION_MS
       );
       console.error(error);
