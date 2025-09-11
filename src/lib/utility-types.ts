@@ -18,3 +18,8 @@ export type NullishToOptional<T> = {
 } & {
   [P in keyof T as T[P] extends null | undefined ? P : never]?: T[P];
 };
+
+/**
+ * Improves hints for types generated via helpers
+ */
+export type Resolve<T> = T extends Function ? T : { [P in keyof T]: T[P] };
