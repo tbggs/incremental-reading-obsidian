@@ -47,18 +47,21 @@ export function getDateTimeString(date?: Date) {
 }
 
 /**
- * Filter characters that cannot be used for file names
- * or Obsidian note titles
+ * Replace characters that cannot be used for file names
+ * or Obsidian note titles with spaces
  */
 export function sanitizeForTitle(text: string, checkFinalChar: boolean) {
   return text
     .trim()
     .split('')
-    .filter(
-      (char, i) =>
-        !FORBIDDEN_TITLE_CHARS.has(char) && (!checkFinalChar ||
-        (i !== text.length - 1 || !' .'.includes(char)))
-    )
+    .map((char, i) => {
+      if (
+        !FORBIDDEN_TITLE_CHARS.has(char) &&
+        (!checkFinalChar || i !== text.length - 1 || !' .'.includes(char))
+      )
+        return char;
+      return ' ';
+    })
     .join('');
 }
 
@@ -69,7 +72,7 @@ export function sanitizeForTitle(text: string, checkFinalChar: boolean) {
 export function getContentSlice(
   content: string,
   sliceLength: number,
-  ellipses: boolean = false,
+  ellipses: boolean = false
 ) {
   const trimmed = content.trim();
   if (!ellipses) return trimmed.slice(0, sliceLength);
@@ -97,7 +100,5 @@ export function createTitle(content?: string) {
   return segments.join(TITLE_SEGMENT_SEPARATOR);
 }
 
-export const isInteger = (value: unknown): value is number => 
-  typeof value === 'number' && 
-  !Number.isNaN(value) && 
-  value % 1 === 0;
+export const isInteger = (value: unknown): value is number =>
+  typeof value === 'number' && !Number.isNaN(value) && value % 1 === 0;
