@@ -3,6 +3,7 @@ import type { BindParams, Database, QueryExecResult } from 'sql.js';
 import initSqlJs from 'sql.js';
 import { pluginId, WASM_FILE_NAME } from '../lib/constants';
 import type { Primitive } from '../lib/utility-types';
+import type { RowTypes } from './types';
 // import wasm from 'sql-wasm.wasm';
 
 // console.log({wasmType: typeof wasm});
@@ -102,6 +103,10 @@ export class SQLiteRepository {
    * @returns an array where each top-level element is the result of a query
    */
   async execSql(query: string, params: Primitive[] = []) {
+    console.log('execSql args:', {
+      query,
+      coercedParams: this.coerceParams(params),
+    });
     const results = this.db.exec(query, this.coerceParams(params));
     console.log('execSql result:', results);
     // if (!results) return null;
@@ -110,7 +115,7 @@ export class SQLiteRepository {
     // in SQL.js, selected rows are returned in form [{ columns: string[], values: Array<SQLValue[]> }]
     const formatted = results.map(this.formatResult);
 
-    console.log(`execSql rows:`);
+    console.log(`formatted results:`);
     console.table(formatted);
 
     return formatted;
@@ -118,8 +123,9 @@ export class SQLiteRepository {
 
   /**
    * Format the result of a single query
+   * TODO: convert snake_case properties to camelCase
    */
-  formatResult(result: QueryExecResult): Array<Record<string, string>> {
+  formatResult<T extends RowTypes>(result: QueryExecResult): T[] {
     const { columns, values } = result;
     const formattedEntries = values.map((row) => {
       const output = row.reduce(
@@ -130,7 +136,7 @@ export class SQLiteRepository {
       return output;
     });
 
-    return formattedEntries;
+    return formattedEntries as T[];
   }
 
   /**
