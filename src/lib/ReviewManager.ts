@@ -1,13 +1,13 @@
-import type { TFile } from 'obsidian';
+import type { TFile, SectionCache, CachedMetadata } from 'obsidian';
 import {
   normalizePath,
+  Notice,
   type App,
   type Editor,
   type MarkdownView,
 } from 'obsidian';
-import QueryComposer from 'src/db/query-composer/QueryComposer';
 import type { SQLiteRepository } from 'src/db/repository';
-import type { Snippet, SRSCard } from 'src/db/types';
+import type { ISnippet, ISRSCard, TableName } from 'src/db/types';
 import {
   MS_PER_DAY,
   SNIPPET_SLICE_LENGTH,
@@ -17,10 +17,19 @@ import {
   SOURCE_PROPERTY_NAME,
   ERROR_NOTICE_DURATION_MS,
   SUCCESS_NOTICE_DURATION_MS,
+  CARD_DIRECTORY,
+  CARD_TAG,
 } from './constants';
 import type { Card, FSRS, FSRSParameters, Grade } from 'ts-fsrs';
 import { createEmptyCard, fsrs, generatorParameters } from 'ts-fsrs';
-import { createFile, createTitle, getContentSlice } from './utils';
+import {
+  compareDates,
+  createFile,
+  createTitle,
+  getContentSlice,
+} from './utils';
+import SRSCard from './card';
+import { randomUUID } from 'crypto';
 
 const FSRS_PARAMETER_DEFAULTS: Partial<FSRSParameters> = {
   enable_fuzz: false,
@@ -28,16 +37,12 @@ const FSRS_PARAMETER_DEFAULTS: Partial<FSRSParameters> = {
 };
 
 export default class ReviewManager {
-  // editor: Editor;
   app: App;
-  #db: QueryComposer;
   #repo: SQLiteRepository;
   #fsrs: FSRS;
 
   constructor(app: App, repo: SQLiteRepository) {
-    // this.editor = editor;
     this.app = app;
-    this.#db = new QueryComposer(repo);
     this.#repo = repo;
     const params = generatorParameters(FSRS_PARAMETER_DEFAULTS);
 
@@ -45,34 +50,255 @@ export default class ReviewManager {
   }
 
   /**
-   * Fetch all snippets and cards ready for review, then order by next_review ASC
-   * TODO: limit fetch count
+   * Fetch all snippets and cards ready for review, then order by due ASC
+   * TODO:
+   * - paginate
+   * - invalidate after some time (e.g., the configured minimum review interval)
+   * @param dueBy Unix timestamp. Defaults to current time.
    */
-  async getDue(limit?: number) {
+  async getDue(dueBy?: number, limit?: number) {
+    const dueTime = dueBy ?? Date.now();
     try {
-      const snippetsDue = await this.#repo.execSql(
-        `SELECT FROM snippet WHERE next_review = $1 ORDER BY next_review ASC`,
-        [Date.now()]
+      const cardsDue = await this.fetchCards({ dueBy: dueTime, limit });
+      const snippetsDue = await this.fetchSnippets({ dueBy: dueTime, limit });
+      console.log({ cardsDue, snippetsDue });
+      const allDue = [...cardsDue, ...snippetsDue].sort((a, b) =>
+        compareDates(a.due, b.due)
       );
-      console.log({ snippetsDue });
-    } catch (error) {}
+      console.log({ allDue, cardsDue, snippetsDue });
+      return { all: allDue, cards: cardsDue, snippets: snippetsDue };
+    } catch (error) {
+      console.error(error);
+    }
+  }
+
+  // #region CARDS
+  /**
+   * Create an SRS item
+   */
+  async createCard(editor: Editor, view: MarkdownView) {
+    const currentFile = view.file;
+    if (!currentFile) {
+      new Notice(`A markdown file must be active`, ERROR_NOTICE_DURATION_MS);
+      return;
+    }
+
+    const selection = view.getSelection();
+
+    // If there's a selection, use it; otherwise, get the current block
+    let content: string;
+    if (selection) {
+      content = selection;
+    } else {
+      // get the currently focused block(s)
+      const blockContent = this.getCurrentBlockContent(editor, currentFile);
+      if (!blockContent) {
+        new Notice(
+          'No block content found at cursor position',
+          ERROR_NOTICE_DURATION_MS
+        );
+        return;
+      }
+      content = blockContent;
+    }
+
+    console.log({ content, selection });
+    try {
+      // Create the card from the content
+      // TODO: Implement card creation logic
+      // create the file as a snippet
+      const cardFile = await this.createFromText(content, CARD_DIRECTORY);
+      const sourceLink = this.generateMarkdownLink(currentFile, cardFile);
+      await this.updateFrontMatter(cardFile, {
+        tags: CARD_TAG,
+        [`${SOURCE_PROPERTY_NAME}`]: sourceLink,
+      });
+
+      // parse question/answer formatting
+
+      // create the database entry as FSRS card + reference
+      const card = new SRSCard(cardFile.name);
+      const params = [
+        card.id,
+        card.reference,
+        card.created_at.getTime(),
+        card.due.getTime(),
+        card.last_review?.getTime() ?? null,
+        card.stability,
+        card.difficulty,
+        card.elapsed_days,
+        card.scheduled_days,
+        card.reps,
+        card.lapses,
+        card.state,
+      ];
+      const insertResult = await this.#repo.mutate(
+        'INSERT INTO srs_card (id, reference, created_at, due, last_review, stability, difficulty, elapsed_days, scheduled_days, reps, lapses, state) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)',
+        params
+      );
+
+      const fetchedCard = (
+        await this.#repo.query('SELECT * FROM srs_card WHERE id = $1', [
+          card.id,
+        ])
+      )[0];
+      console.log('created card:', fetchedCard);
+      return card;
+    } catch (error) {
+      console.error(error);
+      // TODO: error handling
+    }
+  }
+
+  async fetchCards(opts?: { dueBy?: number; limit?: number }) {
+    let query = 'SELECT * FROM srs_card';
+    let params = [];
+    if (opts?.dueBy) {
+      params.push(opts?.dueBy);
+      query += ` WHERE due <= $${params.length}`;
+    }
+    if (opts?.limit) {
+      params.push(opts?.limit);
+      query += ` LIMIT $${params.length}`;
+    }
+    return ((await this.#repo.query(query, params)) ?? []) as SRSCard[];
   }
 
   /**
-   * TODO: Create a new view/window and present the snippets
-   * along with buttons to mark review done, dismiss, etc
+   * TODO: store the updates in db
    */
-  async startReview(limit?: number) {
+  async reviewCard(card: ISRSCard, grade: Grade, reviewTime?: Date) {
+    const recordLog = this.#fsrs.repeat(
+      card,
+      reviewTime || new Date(),
+      (recordLog) => {
+        const recordLogItem = recordLog[grade];
+        console.log({ card, recordLog, recordLogItem });
+        const result = {
+          nextCard: {
+            ...card,
+            ...recordLogItem.card,
+          },
+          reviewLog: recordLogItem.log,
+        };
+
+        return result;
+      }
+    );
+  }
+  // #endregion
+
+  // #region SNIPPETS
+  /**
+   * Save the selected text and add it to the learning queue
+   *
+   * todo:
+   * - handle edge cases (uncommon characters, leading/trailing spaces, )
+   * - selections from web viewer
+   * - selections from native PDF viewer
+   */
+  async createSnippet(view: MarkdownView) {
+    if (!view.file) {
+      new Notice(`A markdown file must be active`, ERROR_NOTICE_DURATION_MS);
+      return;
+    }
+    const selection = view.getSelection();
+    if (!selection) {
+      new Notice('Text must be selected', ERROR_NOTICE_DURATION_MS);
+      return;
+    }
+
+    const currentFile = view.file;
+    const snippetFile = await this.createFromText(selection, SNIPPET_DIRECTORY);
+
+    // Tag it with 'il-text-snippet' and link to the source file
+    const sourceLink = this.generateMarkdownLink(currentFile, snippetFile);
+
+    await this.updateFrontMatter(snippetFile, {
+      tags: SNIPPET_TAG,
+      [`${SOURCE_PROPERTY_NAME}`]: sourceLink,
+    });
+
     try {
-      const snippetsDue = await this.#repo.execSql(
-        `SELECT FROM snippet WHERE next_review = $1`,
-        [Date.now()]
+      // save the snippet to the database
+      const result = await this.#repo.mutate(
+        'INSERT INTO snippet (id, reference, due) VALUES ($1, $2, $3)',
+        [
+          randomUUID(),
+          `${SNIPPET_DIRECTORY}/${snippetFile.name}`,
+          Date.now() + MS_PER_DAY,
+        ]
       );
 
-      const card: Card = createEmptyCard(new Date());
-      const schedulingCards = this.#fsrs.repeat(card, Date.now());
-      console.log({ snippetsDue });
-    } catch (error) {}
+      // TODO: verify this correctly catches failed inserts
+      new Notice(
+        `snippet created: ${snippetFile.basename}`,
+        SUCCESS_NOTICE_DURATION_MS
+      );
+      return result;
+    } catch (error) {
+      new Notice(
+        `Failed to save snippet to database: ${snippetFile.basename}`,
+        ERROR_NOTICE_DURATION_MS
+      );
+      console.error(error);
+    }
+  }
+
+  async fetchSnippets(opts?: { dueBy?: number; limit?: number }) {
+    let query = 'SELECT * FROM snippet';
+    let params = [];
+    if (opts?.dueBy) {
+      params.push(opts?.dueBy);
+      query += ` WHERE due <= $${params.length}`;
+    }
+    if (opts?.limit) {
+      params.push(opts?.limit);
+      query += ` LIMIT $${params.length}`;
+    }
+    return ((await this.#repo.query(query, params)) ?? []) as ISnippet[];
+  }
+  /**
+   * Add a SnippetReview and set the next review date
+   */
+  async reviewSnippet(
+    snippet: ISnippet,
+    reviewTime?: number,
+    nextReviewTime?: number
+  ) {
+    const reviewed = reviewTime || Date.now();
+    const nextReview =
+      nextReviewTime || Date.now() + SNIPPET_FALLBACK_REVIEW_INTERVAL;
+    try {
+      const insertReviewResult = await this.#repo.mutate(
+        'INSERT INTO snippet_review (id, snippet_id, review_time) VALUES ($1, $2, $3)'[
+          (randomUUID(), snippet.id, reviewed)
+        ]
+      );
+      // const insertReviewResult = await this.#db
+      //   .insert('snippet_review')
+      //   .columns('review_time')
+      //   .values({
+      //     id: randomUUID(),
+      //     snippet_id: snippet.id,
+      //     review_time: reviewed,
+      //   })
+      //   .execute();
+
+      const updateSnippetResult = await this.#repo.mutate(
+        `UPDATE snippet SET due = $1 WHERE id = $2`,
+        [nextReview, snippet.id]
+      );
+
+      console.log({ insertReviewResult, updateSnippetResult });
+    } catch (error) {
+      console.error(error);
+    }
+  }
+  // #endregion
+  // #region HELPERS
+  async getNote(reference: string): Promise<TFile | null> {
+    return this.app.vault.getFileByPath(normalizePath(reference));
   }
 
   protected async createNote({
@@ -88,7 +314,7 @@ export default class ReviewManager {
   }) {
     try {
       const fullPath = normalizePath(`${directory}/${fileName}`);
-      const file = await createFile(fullPath);
+      const file = await createFile(this.app, fullPath);
       await this.app.vault.append(file, content);
       frontmatterObj && (await this.updateFrontMatter(file, frontmatterObj));
       return file;
@@ -119,24 +345,13 @@ export default class ReviewManager {
   }
 
   /**
-   * Shared logic for creating snippets and cards
+   * Shared logic for creating snippets and cards.
+   * Throws if it fails to create the file.
    */
-  protected async createFromSelection(view: MarkdownView, directory: string) {
-    // TODO: verify `view.file` can't change between the function invocation and assignment to `currentFile`
-    if (!view.file) {
-      new Notice(`A markdown file must be active`, ERROR_NOTICE_DURATION_MS);
-      return;
-    }
-
-    const selection = view.getSelection();
-    if (!selection) {
-      new Notice('Text must be selected', ERROR_NOTICE_DURATION_MS);
-      return;
-    }
-
-    const newNoteName = createTitle(selection);
+  protected async createFromText(textContent: string, directory: string) {
+    const newNoteName = createTitle(textContent);
     const newNote = await this.createNote({
-      content: selection,
+      content: textContent,
       fileName: `${newNoteName}.md`,
       directory,
     });
@@ -172,122 +387,38 @@ export default class ReviewManager {
       Object.assign(frontmatter, updates);
     });
   }
-
-  // #region CARDS
   /**
-   * Create an SRS item
+   * Get the content of the markdown block/section where the cursor is currently positioned
+   * Uses Obsidian's metadata cache for accurate block detection
    */
-  async createCard(view: MarkdownView) {}
+  getCurrentBlockContent(editor: Editor, file: TFile): string | null {
+    const cursor = editor.getCursor();
+    const cursorOffset = editor.posToOffset(cursor);
 
-  /**
-   * TODO: store the updates in db
-   */
-  async reviewCard(card: SRSCard, grade: Grade, reviewTime?: number) {
-    const recordLog = this.#fsrs.repeat(
-      card,
-      reviewTime || new Date(),
-      (recordLog) => {
-        const recordLogItem = recordLog[grade];
-        console.log({ card, recordLog, recordLogItem });
-        const result = {
-          ...card,
-          ...recordLogItem.card,
-          reviewLog: recordLogItem.log,
-        };
-
-        return result;
-      }
-    );
-  }
-  // #endregion
-
-  // #region SNIPPETS
-  /**
-   * Save the selected text and add it to the learning queue
-   *
-   * todo:
-   * - handle edge cases (uncommon characters, leading/trailing spaces, )
-   * - selections from web viewer
-   * - selections from native PDF viewer
-   */
-  async createSnippet(view: MarkdownView) {
-    if (!view.file) {
-      new Notice(`A markdown file must be active`, ERROR_NOTICE_DURATION_MS);
-      return;
+    // Get the cached metadata for the current file
+    const cache = this.app.metadataCache.getFileCache(file);
+    if (!cache?.sections) {
+      return null;
     }
 
-    const currentFile = view.file;
-    const snippetFile = await this.createFromSelection(view, SNIPPET_DIRECTORY);
-    if (!snippetFile) return;
-
-    // Tag it with 'il-text-snippet' and link to the source file
-    const sourceLink = this.app.fileManager.generateMarkdownLink(
-      currentFile,
-      snippetFile.path,
-      undefined,
-      currentFile.basename
-    );
-
-    await this.updateFrontMatter(snippetFile, {
-      tags: SNIPPET_TAG,
-      [`${SOURCE_PROPERTY_NAME}`]: sourceLink,
+    // Find the section that contains the cursor position
+    const currentSection = cache.sections.find((section) => {
+      return (
+        cursorOffset >= section.position.start.offset &&
+        cursorOffset <= section.position.end.offset
+      );
     });
 
-    try {
-      // save the snippet to the database
-      const result = await this.#db
-        .insert('snippet')
-        .columns('reference', 'next_review')
-        .values({
-          reference: snippetFile.name,
-          next_review: Date.now() + MS_PER_DAY,
-        })
-        .execute();
-
-      // TODO: verify this correctly catches failed inserts
-      new Notice(
-        `snippet created: ${snippetFile.basename}`,
-        SUCCESS_NOTICE_DURATION_MS
-      );
-      return result;
-    } catch (error) {
-      new Notice(
-        `Failed to save snippet to database: ${snippetFile.basename}`,
-        ERROR_NOTICE_DURATION_MS
-      );
-      console.error(error);
+    if (!currentSection) {
+      return null;
     }
-  }
-  /**
-   * Add a SnippetReview and set the next review date
-   */
-  async reviewSnippet(
-    snippet: Snippet,
-    reviewTime?: number,
-    nextReviewTime?: number
-  ) {
-    const review = reviewTime || Date.now();
-    const nextReview =
-      nextReviewTime || Date.now() + SNIPPET_FALLBACK_REVIEW_INTERVAL;
-    try {
-      const insertReviewResult = await this.#db
-        .insert('snippet_review')
-        .columns('snippet_id', 'review_time')
-        .values({
-          snippet_id: snippet.id,
-          review_time: review,
-        })
-        .execute();
 
-      const updateSnippetResult = await this.#repo.execSql(
-        `UPDATE snippet SET next_review = $1 WHERE id = $2`,
-        [nextReview, snippet.id]
-      );
+    // Get the content of the section
+    const sectionStart = currentSection.position.start.offset;
+    const sectionEnd = currentSection.position.end.offset;
+    const fullContent = editor.getValue();
 
-      console.log({ insertReviewResult, updateSnippetResult });
-    } catch (error) {
-      console.error(error);
-    }
+    return fullContent.slice(sectionStart, sectionEnd);
   }
   // #endregion
 }

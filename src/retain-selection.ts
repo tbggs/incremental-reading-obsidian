@@ -9,6 +9,7 @@ import {
 } from './lib/constants';
 import { createFile, createTitle, getContentSlice } from './lib/utils';
 import type QueryComposer from './db/query-composer/QueryComposer';
+import { randomUUID } from 'crypto';
 
 /**
  * Save the selected text and add it to the learning queue
@@ -52,7 +53,7 @@ export async function retainSelection(
   const snippetPath = normalizePath(
     `${SNIPPET_DIRECTORY}/${snippetFileName}.md`
   );
-  const snippetFile = await createFile(snippetPath);
+  const snippetFile = await createFile(app, snippetPath);
 
   // Tag it with il-text-snippet, source to point to the source file, and date/time created
   // TODO: handle disambiguation for files with non-unique names the way Obsidian does
@@ -74,10 +75,11 @@ export async function retainSelection(
   console.log('inserting into database');
   const result = await db
     .insert('snippet')
-    .columns('reference', 'next_review')
+    .columns('reference', 'due')
     .values({
+      id: randomUUID(),
       reference: snippetFile.name,
-      next_review: Date.now() + MS_PER_DAY,
+      due: Date.now() + MS_PER_DAY,
       // last_review: 0, // invalid prop for testing
     })
     .execute();
@@ -85,7 +87,7 @@ export async function retainSelection(
   console.log('insert result:', result);
 
   // await repo.mutate(
-  //   `INSERT INTO snippet (reference, next_review) VALUES ($1, $2)`,
+  //   `INSERT INTO snippet (reference, due) VALUES ($1, $2)`,
   //   [snippetFile.name, Date.now() + MS_PER_DAY]
   // );
   const slice = getContentSlice(selection, SNIPPET_SLICE_LENGTH, true);

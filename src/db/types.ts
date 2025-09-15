@@ -3,24 +3,29 @@ import type { Card, FSRSReview } from 'ts-fsrs';
 import { FSRSParameters } from 'ts-fsrs';
 import type { TABLE_NAMES } from '../lib/constants';
 
-export interface SRSCard extends Card {
+export interface ISRSCard extends Card {
   id: string;
   reference: string;
+  created_at: Date;
 }
 
-export interface SRSCardReview extends FSRSReview {
+export interface ISRSCardReview extends FSRSReview {
   id: string;
   card_id: string;
 }
 
-export interface Snippet {
+export interface ISnippet {
   id: string;
   reference: string;
-  next_review: number | null;
+  due: number | null;
   dismissed?: boolean;
 }
 
-export interface SnippetReview {
+export interface IDueSnippet extends ISnippet {
+  due: number;
+}
+
+export interface ISnippetReview {
   id: string;
   snippet_id: string;
   review_time: number; // Unix timestamp
@@ -28,8 +33,10 @@ export interface SnippetReview {
 
 export type TableName = (typeof TABLE_NAMES)[number];
 
-export type RowTypes = Snippet | SnippetReview;
+export type RowTypes = ISnippet | ISnippetReview | ISRSCard | ISRSCardReview;
 export interface TableNameToRowType extends Record<TableName, RowTypes> {
-  snippet: Snippet;
-  snippet_review: SnippetReview;
+  snippet: ISnippet;
+  snippet_review: ISnippetReview;
+  srs_card: ISRSCard;
+  srs_card_review: ISRSCardReview;
 }

@@ -1,18 +1,21 @@
-import type { TFile } from 'obsidian';
+import type { App, TFile } from 'obsidian';
 import { CONTENT_TITLE_SLICE_LENGTH, FORBIDDEN_TITLE_CHARS } from './constants';
 
-export async function createFile(absolutePath: string): Promise<TFile> {
-  if (this.app.vault.getAbstractFileByPath(absolutePath)) {
+export async function createFile(
+  app: App,
+  absolutePath: string
+): Promise<TFile> {
+  if (app.vault.getAbstractFileByPath(absolutePath)) {
     throw new Error(`File already exists at ${absolutePath}`);
   }
 
   const folderPath = absolutePath.slice(0, absolutePath.lastIndexOf('/'));
-  if (!this.app.vault.getAbstractFileByPath(folderPath)) {
-    await this.app.vault.createFolder(folderPath);
+  if (!app.vault.getAbstractFileByPath(folderPath)) {
+    await app.vault.createFolder(folderPath);
   }
 
   try {
-    const file = await this.app.vault.create(absolutePath, '');
+    const file = await app.vault.create(absolutePath, '');
     return file;
   } catch (e) {
     console.error(`Failed to create file at ${absolutePath}`);
@@ -102,3 +105,14 @@ export function createTitle(content?: string) {
 
 export const isInteger = (value: unknown): value is number =>
   typeof value === 'number' && !Number.isNaN(value) && value % 1 === 0;
+
+export function compareDates(a: number | Date | null, b: number | Date | null) {
+  if (a === null && b === null) return 0;
+  if (a === null) return 1;
+  if (b === null) return -1;
+  const [aNum, bNum] = [a, b].map((val) =>
+    typeof val === 'number' ? val : Date.parse(val.toUTCString())
+  );
+
+  return aNum - bNum;
+}

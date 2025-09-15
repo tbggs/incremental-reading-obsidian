@@ -1,4 +1,4 @@
-import type { App, Editor, MarkdownView } from 'obsidian';
+import type { App, Editor, MarkdownView, WorkspaceLeaf } from 'obsidian';
 import {
   addIcon,
   Modal,
@@ -15,6 +15,8 @@ import {
 import { SQLiteRepository } from './db/repository';
 import QueryComposer from './db/query-composer/QueryComposer';
 import ReviewManager from './lib/ReviewManager';
+import { State } from 'ts-fsrs';
+import ReviewView from './views/ReviewView';
 
 // Remember to rename these classes and interfaces!
 
@@ -72,53 +74,113 @@ export default class MyPlugin extends Plugin {
     });
 
     this.addCommand({
-      id: 'list-snippets',
-      name: 'list snippets',
-      callback: async () => {
-        const rows = await this.#db.select('snippet').execute();
-
-        // await this.repo?.query('SELECT rowid, * FROM snippet');
-        if (!rows) {
-          console.log('No snippets found');
+      id: 'create-card',
+      name: 'Create SRS card from selection or current block',
+      hotkeys: [
+        {
+          modifiers: ['Alt', 'Shift'],
+          key: 'C',
+        },
+      ],
+      editorCallback: (editor: Editor, view: MarkdownView) => {
+        if (!this.#reviewManager) {
+          new Notice(`Plugin still loading`);
           return;
         }
-        console.table(
-          rows.map((row) => ({
-            ...row,
-            next_review: row.next_review
-              ? new Date(row.next_review).toUTCString()
-              : null,
-            dismissed: Boolean(row.dismissed),
-          }))
-        );
+        return this.#reviewManager.createCard(editor, view);
       },
     });
 
     this.addCommand({
-      // TODO: remove after done testing
-      id: 'delete-all-snippets',
-      name: 'DELETE all snippets',
+      id: 'begin learning',
+      name: 'Learn',
       callback: async () => {
-        const deleteResult = await this.#db.delete('snippet').execute();
-        const rows = await this.#db.select('snippet').execute();
+        let leaf: WorkspaceLeaf | null = null;
+        const leaves = this.app.workspace.getLeavesOfType(ReviewView.viewType);
 
-        // await this.repo?.query('SELECT rowid, * FROM snippet');
-        if (!rows) return;
-        new Notice(
-          `Failed to delete all snippets from database!`,
-          ERROR_NOTICE_DURATION_MS
-        );
-        console.table(
-          rows.map((row) => ({
-            ...row,
-            next_review: row.next_review
-              ? new Date(row.next_review).toUTCString()
-              : null,
-            dismissed: Boolean(row.dismissed),
-          }))
-        );
+        if (leaves.length > 0) {
+          leaf = leaves[0];
+        } else {
+          leaf = this.app.workspace.getLeaf();
+          await leaf.setViewState({ type: ReviewView.viewType, active: true });
+        }
+
+        this.app.workspace.revealLeaf(leaf);
       },
     });
+
+    this.addCommand({
+      id: 'list-snippets-and-cards',
+      name: 'list snippets and cards',
+      callback: async () => {
+        if (!this.#db) {
+          new Notice(`SQLite database still loading`);
+          return;
+        }
+        const snippets = await this.#reviewManager.fetchSnippets();
+        const cards = await this.#reviewManager.fetchCards();
+
+        // await this.repo?.query('SELECT rowid, * FROM snippet');
+        if (!snippets && !cards) {
+          console.log('No snippets or cards found');
+          return;
+        }
+        snippets &&
+          console.table(
+            snippets.map((snippet) => ({
+              ...snippet,
+              due: snippet.due ? new Date(snippet.due).toUTCString() : null,
+              dismissed: Boolean(snippet.dismissed),
+            }))
+          );
+        cards &&
+          console.table(
+            cards.map((card) => ({
+              ...card,
+              created_at: new Date(card.created_at).toUTCString(),
+              due: new Date(card.created_at).toUTCString(),
+              last_review: card.last_review
+                ? new Date(card.last_review).toUTCString()
+                : null,
+              state: State[card.state],
+            }))
+          );
+
+        // const due = await this.#reviewManager.getDue();
+        // if (due) {
+        //   console.log('due:');
+        //   console.table(due.all);
+        // }
+      },
+    });
+
+    // this.addCommand({
+    //   // TODO: remove after done testing
+    //   id: 'delete-all-snippets',
+    //   name: 'DELETE all snippets',
+    //   callback: async () => {
+    //     if (!this.#db) {
+    //       new Notice(`SQLite database still loading`);
+    //       return;
+    //     }
+    //     const deleteResult = await this.#db.delete('snippet').execute();
+    //     const rows = await this.#db.select('snippet').execute();
+
+    //     // await this.repo?.query('SELECT rowid, * FROM snippet');
+    //     if (!rows) return;
+    //     new Notice(
+    //       `Failed to delete all snippets from database!`,
+    //       ERROR_NOTICE_DURATION_MS
+    //     );
+    //     console.table(
+    //       rows.map((row) => ({
+    //         ...row,
+    //         due: row.due ? new Date(row.due).toUTCString() : null,
+    //         dismissed: Boolean(row.dismissed),
+    //       }))
+    //     );
+    //   },
+    // });
 
     // TODO: set up UI modal
     // // This adds a complex command that can check whether the current state of the app allows execution of the command
@@ -166,6 +228,10 @@ export default class MyPlugin extends Plugin {
       );
       this.#db = new QueryComposer(repo);
       this.#reviewManager = new ReviewManager(this.app, repo);
+      this.registerView(
+        ReviewView.viewType,
+        (leaf) => new ReviewView(leaf, this.#reviewManager)
+      );
 
       // listen for snippet creations
       this.app.vault.on('create', async (file) => {
@@ -182,7 +248,7 @@ export default class MyPlugin extends Plugin {
         // } else if (result.length === 0) {
         //   // insert a new snippet row
         //   await repo.mutate(
-        //     `INSERT INTO snippet (reference, next_review) VALUES ($1, $2)`,
+        //     `INSERT INTO snippet (reference, due) VALUES ($1, $2)`,
         //     [file.name, Date.now() + MS_PER_DAY]
         //   );
         // } else {
@@ -190,7 +256,7 @@ export default class MyPlugin extends Plugin {
         // }
       });
       // const executeExampleQuery = async (reference: string, nextReview: number) => {
-      // 	const myQuery = `INSERT INTO snippet (reference, next_review) ` +
+      // 	const myQuery = `INSERT INTO snippet (reference, due) ` +
       // 									`VALUES ($1, $2)`;
 
       // 	const result = await repo.mutate(myQuery, [reference, nextReview]);

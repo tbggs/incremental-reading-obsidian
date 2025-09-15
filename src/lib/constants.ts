@@ -12,6 +12,7 @@ export const SNIPPET_DIRECTORY = 'increading/snippets';
 export const CARD_DIRECTORY = 'increading/cards';
 
 export const SNIPPET_TAG = 'il-text-snippet';
+export const CARD_TAG = 'il-card';
 export const SOURCE_PROPERTY_NAME = 'il-source';
 
 export const ERROR_NOTICE_DURATION_MS = 8000;
@@ -28,6 +29,8 @@ export const MS_PER_DAY = 1000 * 86_400;
 export const TABLE_NAMES = Object.freeze([
   'snippet',
   'snippet_review',
+  'srs_card',
+  'srs_card_review',
 ] as const);
 
 export const SNIPPET_FALLBACK_REVIEW_INTERVAL = MS_PER_DAY * 1;

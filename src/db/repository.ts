@@ -38,7 +38,7 @@ export class SQLiteRepository {
     const repo = new SQLiteRepository(app, dbFilePath, schemaFilePath);
     // load the database file or create it if loading fails
     // TODO: handle failed loads when the file exists
-    (await repo.loadDb()) ?? (await repo.initDb()); // TODO: uncomment for production
+    (await repo.loadDb()) ?? (await repo.initDb()); // TODO: uncomment to persist data between starts
     // await repo.initDb(); // TODO: remove for production
     return repo;
   }
@@ -51,9 +51,13 @@ export class SQLiteRepository {
    * @returns an array of rows
    */
   async query(query: string, params: Primitive[] = []) {
+    console.log('query:', query);
+    console.log('params:', params);
     const result = await this.execSql(query, params);
-    console.log({ result });
-    return result?.[0];
+    const rows = result?.[0];
+    console.log('queryResult:');
+    console.table(rows);
+    return rows;
   }
 
   /**
@@ -103,20 +107,20 @@ export class SQLiteRepository {
    * @returns an array where each top-level element is the result of a query
    */
   async execSql(query: string, params: Primitive[] = []) {
-    console.log('execSql args:', {
-      query,
-      coercedParams: this.coerceParams(params),
-    });
+    // console.log('execSql args:', {
+    //   query,
+    //   coercedParams: this.coerceParams(params),
+    // });
     const results = this.db.exec(query, this.coerceParams(params));
-    console.log('execSql result:', results);
+    // console.log('execSql result:', results);
     // if (!results) return null;
     if (!results || !results.length) return [];
 
     // in SQL.js, selected rows are returned in form [{ columns: string[], values: Array<SQLValue[]> }]
     const formatted = results.map(this.formatResult);
 
-    console.log(`formatted results:`);
-    console.table(formatted);
+    // console.log(`formatted results:`);
+    // console.table(formatted);
 
     return formatted;
   }
@@ -146,7 +150,7 @@ export class SQLiteRepository {
     if (!this.db) throw new Error('Database was not initialized on repository');
     const data = this.db.export().buffer;
     return this.app.vault.adapter.writeBinary(
-      this.getFilePath(this.#dbFilePath),
+      this.getDbFilePath(this.#dbFilePath),
       data as ArrayBuffer
     );
   }
@@ -159,7 +163,7 @@ export class SQLiteRepository {
     const sql = await this.loadWasm();
     this.db = new sql.Database();
     const schema = await this.adapter.read(
-      this.getFilePath(this.#schemaFilePath)
+      this.getDbFilePath(this.#schemaFilePath)
     );
     this.db.exec(schema);
     await this.save();
@@ -194,9 +198,10 @@ export class SQLiteRepository {
     try {
       const sql = await this.loadWasm();
       const dbArrayBuffer = await this.app.vault.adapter.readBinary(
-        this.getFilePath(this.#dbFilePath)
+        this.getDbFilePath(this.#dbFilePath)
       );
       this.db = new sql.Database(Buffer.from(dbArrayBuffer));
+      console.log('Incremental Reading database loaded');
       return this.db;
     } catch (e: unknown) {
       // TODO: properly handle errors
@@ -213,13 +218,13 @@ export class SQLiteRepository {
   private async loadWasm() {
     const sql = await initSqlJs({
       // TODO: handle throws
-      locateFile: (_file) => this.getFilePath(WASM_FILE_NAME, true),
+      locateFile: (_file) => this.getDbFilePath(WASM_FILE_NAME, true),
     });
 
     return sql;
   }
 
-  private getFilePath(fileName: string, absolute = false) {
+  private getDbFilePath(fileName: string, absolute = false) {
     const pathSegments = [
       this.app.vault.configDir,
       'plugins',
