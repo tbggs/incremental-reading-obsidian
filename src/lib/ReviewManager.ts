@@ -1,4 +1,9 @@
-import type { TFile, SectionCache, CachedMetadata } from 'obsidian';
+import type {
+  TFile,
+  SectionCache,
+  CachedMetadata,
+  TAbstractFile,
+} from 'obsidian';
 import {
   normalizePath,
   Notice,
@@ -219,6 +224,13 @@ export default class ReviewManager {
       [`${SOURCE_PROPERTY_NAME}`]: sourceLink,
     });
 
+    return this.createSnippetFromFile(snippetFile);
+  }
+
+  /**
+   * Given a preexisting snippet file, insert into database
+   */
+  async createSnippetFromFile(snippetFile: TFile) {
     try {
       // save the snippet to the database
       const result = await this.#repo.mutate(
@@ -257,6 +269,14 @@ export default class ReviewManager {
       query += ` LIMIT $${params.length}`;
     }
     return ((await this.#repo.query(query, params)) ?? []) as ISnippet[];
+  }
+
+  async findSnippet(snippetFile: TAbstractFile) {
+    const results = await this.#repo.query(
+      'SELECT * FROM snippet WHERE reference = $1',
+      [snippetFile.path]
+    );
+    return results;
   }
   /**
    * Add a SnippetReview and set the next review date

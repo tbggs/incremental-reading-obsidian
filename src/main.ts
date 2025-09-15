@@ -13,7 +13,6 @@ import {
   SCHEMA_FILE_PATH,
 } from './lib/constants';
 import { SQLiteRepository } from './db/repository';
-import QueryComposer from './db/query-composer/QueryComposer';
 import ReviewManager from './lib/ReviewManager';
 import { State } from 'ts-fsrs';
 import ReviewView from './views/ReviewView';
@@ -30,7 +29,6 @@ const DEFAULT_SETTINGS: MyPluginSettings = {
 
 export default class MyPlugin extends Plugin {
   settings: MyPluginSettings;
-  #db: QueryComposer;
   #reviewManager: ReviewManager;
 
   async onload() {
@@ -64,12 +62,11 @@ export default class MyPlugin extends Plugin {
         },
       ], // TODO: add setting to customize
       editorCallback: (editor: Editor, view: MarkdownView) => {
-        if (!this.#db) {
-          new Notice(`SQLite database still loading`);
+        if (!this.#reviewManager) {
+          new Notice(`Plugin still loading`);
           return;
         }
         return this.#reviewManager.createSnippet(view);
-        // return retainSelection(editor, view, this.app, this.#db);
       },
     });
 
@@ -113,8 +110,8 @@ export default class MyPlugin extends Plugin {
       id: 'list-snippets-and-cards',
       name: 'list snippets and cards',
       callback: async () => {
-        if (!this.#db) {
-          new Notice(`SQLite database still loading`);
+        if (!this.#reviewManager) {
+          new Notice(`Plugin still loading`);
           return;
         }
         const snippets = await this.#reviewManager.fetchSnippets();
@@ -182,27 +179,6 @@ export default class MyPlugin extends Plugin {
     //   },
     // });
 
-    // TODO: set up UI modal
-    // // This adds a complex command that can check whether the current state of the app allows execution of the command
-    // this.addCommand({
-    // 	id: 'open-sample-modal-complex',
-    // 	name: 'Open sample modal (complex)',
-    // 	checkCallback: (checking: boolean) => {
-    // 		// Conditions to check
-    // 		const markdownView = this.app.workspace.getActiveViewOfType(MarkdownView);
-    // 		if (markdownView) {
-    // 			// If checking is true, we're simply "checking" if the command can be run.
-    // 			// If checking is false, then we want to actually perform the operation.
-    // 			if (!checking) {
-    // 				new SampleModal(this.app).open();
-    // 			}
-
-    // 			// This command will only show up in Command Palette when the check function returns true
-    // 			return true;
-    // 		}
-    // 	}
-    // });
-
     // This adds a settings tab so the user can configure various aspects of the plugin
     this.addSettingTab(new SampleSettingTab(this.app, this));
 
@@ -217,55 +193,40 @@ export default class MyPlugin extends Plugin {
 
     this.app.workspace.onLayoutReady(async () => {
       // expensive startup operations should go here
-
-      // const currentView = this.app.workspace.getActiveViewOfType(MarkdownView);
-      // const currentDoc = currentView?.file;
-      // console.log({ currentDoc, currentFile });
       const repo = await SQLiteRepository.start(
         this.app,
         DATABASE_FILE_PATH,
         SCHEMA_FILE_PATH
       );
-      this.#db = new QueryComposer(repo);
       this.#reviewManager = new ReviewManager(this.app, repo);
       this.registerView(
         ReviewView.viewType,
         (leaf) => new ReviewView(leaf, this.#reviewManager)
       );
 
-      // listen for snippet creations
-      this.app.vault.on('create', async (file) => {
-        // // check if the snippet is in the database already
-        // const result = await this.#db.select('snippet').columns('id').execute();
-        // // await repo.query(
-        // //   `SELECT (id) FROM snippet WHERE reference = $1`,
-        // //   [file.name]
-        // // );
-        // // TODO: handle failed fetches differently from no results
-        // if (!result) {
-        //   new Notice(`Failed to fetch rows`, ERROR_NOTICE_DURATION_MS);
-        //   return;
-        // } else if (result.length === 0) {
-        //   // insert a new snippet row
-        //   await repo.mutate(
-        //     `INSERT INTO snippet (reference, due) VALUES ($1, $2)`,
-        //     [file.name, Date.now() + MS_PER_DAY]
-        //   );
-        // } else {
-        //   // if so, set dismissed to 0
-        // }
-      });
-      // const executeExampleQuery = async (reference: string, nextReview: number) => {
-      // 	const myQuery = `INSERT INTO snippet (reference, due) ` +
-      // 									`VALUES ($1, $2)`;
-
-      // 	const result = await repo.mutate(myQuery, [reference, nextReview]);
-      // 	return result;
-      // }
-
-      // const result = await executeExampleQuery(source, reference, nextReview);
-      const fetchQuery = 'SELECT * FROM snippet';
-      const fetchResult = await repo.query(fetchQuery);
+      // listen for snippet creations. TODO: handle race condition
+      // this.app.vault.on('create', async (file) => {
+      //   // check if the snippet is in the database already
+      //   const results = await this.#reviewManager.findSnippet(file);
+      //   // await repo.query(
+      //   //   `SELECT (id) FROM snippet WHERE reference = $1`,
+      //   //   [file.name]
+      //   // );
+      //   // TODO: handle failed fetches differently from no results
+      //   if (!results) {
+      //     new Notice(`Failed to fetch rows`, ERROR_NOTICE_DURATION_MS);
+      //     return;
+      //   } else if (results.length === 0) {
+      //     // insert a new snippet row
+      //     const snippetFile = this.app.vault.getFileByPath(file.path);
+      //     if (!snippetFile) {
+      //       return; // TODO: handle
+      //     }
+      //     await this.#reviewManager.createSnippetFromFile(snippetFile);
+      //   } else {
+      //     // if so, set dismissed to 0
+      //   }
+      // });
     });
   }
 
