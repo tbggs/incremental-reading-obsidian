@@ -7,6 +7,8 @@ CREATE TABLE IF NOT EXISTS snippet (
   -- CHECK(due IS NOT NULL OR dismissed = TRUE) -- Enable this after testing
 );
 
+CREATE INDEX IF NOT EXISTS snippet_reference ON snippet(reference);
+
 -- Log of all snippet reviews
 CREATE TABLE IF NOT EXISTS snippet_review (
   id TEXT NOT NULL, -- UUID
@@ -30,6 +32,8 @@ CREATE TABLE IF NOT EXISTS srs_card (
   state INTEGER NOT NULL DEFAULT 0,
   CHECK(state >= 0 AND state <= 3)
 );
+
+CREATE INDEX IF NOT EXISTS srs_card_reference ON srs_card(reference);
 
 CREATE TABLE IF NOT EXISTS srs_card_review (
   id TEXT NOT NULL, -- UUID
