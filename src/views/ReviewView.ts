@@ -3,6 +3,7 @@ import { ItemView, MarkdownRenderer } from 'obsidian';
 import type { ISnippet, ISRSCard } from 'src/db/types';
 import {
   MS_PER_DAY,
+  PLACEHOLDER_PLUGIN_ICON,
   SNIPPET_FALLBACK_REVIEW_INTERVAL,
   SNIPPET_REVIEW_INTERVALS,
   SUCCESS_NOTICE_DURATION_MS,
@@ -42,7 +43,7 @@ export default class ReviewView extends ItemView {
   }
 
   getIcon(): IconName {
-    return 'book-open-text';
+    return PLACEHOLDER_PLUGIN_ICON;
   }
 
   get file() {

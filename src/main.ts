@@ -11,7 +11,7 @@ import {
 import {
   DATABASE_FILE_PATH,
   ERROR_NOTICE_DURATION_MS,
-  PLUGIN_ICON,
+  PLACEHOLDER_PLUGIN_ICON,
   SCHEMA_FILE_PATH,
 } from './lib/constants';
 import { SQLiteRepository } from './db/repository';
@@ -39,7 +39,7 @@ export default class IncrementalReadingPlugin extends Plugin {
     // This creates an icon in the left ribbon.
     // TODO: replace the placeholder
     const ribbonIconEl = this.addRibbonIcon(
-      PLUGIN_ICON,
+      PLACEHOLDER_PLUGIN_ICON,
       'Incremental Reading',
       async (evt: MouseEvent) => {
         // Called when the user clicks the icon.

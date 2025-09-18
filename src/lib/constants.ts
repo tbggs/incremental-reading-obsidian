@@ -2,7 +2,7 @@ import * as manifestData from 'src/../manifest.json';
 
 export const PLUGIN_ID = manifestData.id;
 // const WASM_FILE_PATH = './node_modules/sql.js/dist/sql-wasm.wasm'; // TODO: find a way to import properly
-export const PLUGIN_ICON = 'lightbulb';
+export const PLACEHOLDER_PLUGIN_ICON = 'book-open-text';
 
 // TODO: move to settings
 export const WASM_FILE_NAME = 'sql-wasm.wasm';
