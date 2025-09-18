@@ -308,13 +308,15 @@ export default class ReviewManager {
     const currentFile = view.file;
     const snippetFile = await this.createFromText(selection, SNIPPET_DIRECTORY);
 
-    // Tag it with 'il-text-snippet' and link to the source file
+    // Tag it and link to the source file
     const sourceLink = this.generateMarkdownLink(currentFile, snippetFile);
 
     await this.updateFrontMatter(snippetFile, {
       tags: SNIPPET_TAG,
       [`${SOURCE_PROPERTY_NAME}`]: sourceLink,
     });
+
+    // TODO: transclude the snippet into its source location
 
     return this.createSnippetFromFile(snippetFile, reviewTime);
   }

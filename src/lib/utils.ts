@@ -45,7 +45,7 @@ export function generateId(length: number = 5): string {
 export function getDateTimeString(date?: Date) {
   const dateToUse = date ?? new Date();
   let formatted = `${dateToUse.getUTCFullYear()}-${dateToUse.getUTCMonth() + 1}-${dateToUse.getUTCDate()}`;
-  formatted += `T${dateToUse.getHours()}h${dateToUse.getMinutes()}m${dateToUse.getSeconds()}s`;
+  formatted += `T${dateToUse.getHours()}H${dateToUse.getMinutes()}M`;
   return formatted;
 }
 
