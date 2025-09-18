@@ -1,6 +1,6 @@
 {
-	"id": "incremental-learning",
-	"name": "Incremental Learning",
+	"id": "incremental-reading",
+	"name": "Incremental Reading",
 	"version": "0.0.1",
 	"minAppVersion": "1.6.0",
 	"description": "Leverage spaced repetition to incrementally build understanding and retain knowledge.",

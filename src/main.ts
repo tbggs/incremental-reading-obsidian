@@ -10,6 +10,7 @@ import {
 import {
   DATABASE_FILE_PATH,
   ERROR_NOTICE_DURATION_MS,
+  PLUGIN_ICON,
   SCHEMA_FILE_PATH,
 } from './lib/constants';
 import { SQLiteRepository } from './db/repository';
@@ -27,7 +28,7 @@ const DEFAULT_SETTINGS: MyPluginSettings = {
   mySetting: 'default',
 };
 
-export default class MyPlugin extends Plugin {
+export default class IncrementalReadingPlugin extends Plugin {
   settings: MyPluginSettings;
   #reviewManager: ReviewManager;
 
@@ -37,15 +38,15 @@ export default class MyPlugin extends Plugin {
     // This creates an icon in the left ribbon.
     // TODO: replace the placeholder
     const ribbonIconEl = this.addRibbonIcon(
-      'lightbulb',
-      'Incremental Learning',
+      PLUGIN_ICON,
+      'Incremental Reading',
       (evt: MouseEvent) => {
         // Called when the user clicks the icon.
         new Notice('This is a notice!');
       }
     );
     // Perform additional things with the ribbon
-    ribbonIconEl.addClass('incremental-learning-ribbon');
+    ribbonIconEl.addClass('incremental-reading-ribbon');
 
     // TODO: show counts of cards and snippets in queue?
     // // This adds a status bar item to the bottom of the app. Does not work on mobile apps.
@@ -108,7 +109,7 @@ export default class MyPlugin extends Plugin {
 
     this.addCommand({
       id: 'list-snippets-and-cards',
-      name: 'list snippets and cards',
+      name: 'List snippets and cards',
       callback: async () => {
         if (!this.#reviewManager) {
           new Notice(`Plugin still loading`);
@@ -126,7 +127,7 @@ export default class MyPlugin extends Plugin {
           console.table(
             snippets.map((snippet) => ({
               ...snippet,
-              due: snippet.due ? new Date(snippet.due).toUTCString() : null,
+              due: snippet.due ? new Date(snippet.due).toString() : null,
               dismissed: Boolean(snippet.dismissed),
             }))
           );
@@ -134,10 +135,10 @@ export default class MyPlugin extends Plugin {
           console.table(
             cards.map((card) => ({
               ...card,
-              created_at: new Date(card.created_at).toUTCString(),
-              due: new Date(card.created_at).toUTCString(),
+              created_at: new Date(card.created_at).toString(),
+              due: new Date(card.created_at).toString(),
               last_review: card.last_review
-                ? new Date(card.last_review).toUTCString()
+                ? new Date(card.last_review).toString()
                 : null,
               state: State[card.state],
             }))
@@ -172,7 +173,7 @@ export default class MyPlugin extends Plugin {
     //     console.table(
     //       rows.map((row) => ({
     //         ...row,
-    //         due: row.due ? new Date(row.due).toUTCString() : null,
+    //         due: row.due ? new Date(row.due).toString() : null,
     //         dismissed: Boolean(row.dismissed),
     //       }))
     //     );
@@ -180,7 +181,7 @@ export default class MyPlugin extends Plugin {
     // });
 
     // This adds a settings tab so the user can configure various aspects of the plugin
-    this.addSettingTab(new SampleSettingTab(this.app, this));
+    // this.addSettingTab(new SampleSettingTab(this.app, this)); // TODO: set up settings
 
     // // If the plugin hooks up any global DOM events (on parts of the app that doesn't belong to this plugin)
     // // Using this function will automatically remove the event listener when this plugin is disabled.
@@ -242,9 +243,9 @@ export default class MyPlugin extends Plugin {
 }
 
 class SampleSettingTab extends PluginSettingTab {
-  plugin: MyPlugin;
+  plugin: IncrementalReadingPlugin;
 
-  constructor(app: App, plugin: MyPlugin) {
+  constructor(app: App, plugin: IncrementalReadingPlugin) {
     super(app, plugin);
     this.plugin = plugin;
   }

@@ -2,18 +2,19 @@ import * as manifestData from 'src/../manifest.json';
 
 export const PLUGIN_ID = manifestData.id;
 // const WASM_FILE_PATH = './node_modules/sql.js/dist/sql-wasm.wasm'; // TODO: find a way to import properly
+export const PLUGIN_ICON = 'lightbulb';
 
 // TODO: move to settings
 export const WASM_FILE_NAME = 'sql-wasm.wasm';
-export const DATABASE_FILE_PATH = './il-user-data.sqlite';
-export const TEST_DATABASE_FILE_PATH = './il-test-data.sqlite';
+export const DATABASE_FILE_PATH = './ir-user-data.sqlite';
+export const TEST_DATABASE_FILE_PATH = './ir-test-data.sqlite';
 export const SCHEMA_FILE_PATH = 'src/db/schema.sql';
 export const SNIPPET_DIRECTORY = 'increading/snippets';
 export const CARD_DIRECTORY = 'increading/cards';
 
-export const SNIPPET_TAG = 'il-text-snippet';
-export const CARD_TAG = 'il-card';
-export const SOURCE_PROPERTY_NAME = 'il-source';
+export const SNIPPET_TAG = 'ir-text-snippet';
+export const CARD_TAG = 'ir-card';
+export const SOURCE_PROPERTY_NAME = 'ir-source';
 
 export const ERROR_NOTICE_DURATION_MS = 8000;
 export const SUCCESS_NOTICE_DURATION_MS = 4000;
