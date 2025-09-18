@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS snippet (
 );
 
 CREATE INDEX IF NOT EXISTS snippet_reference ON snippet(reference);
+CREATE INDEX IF NOT EXISTS snippet_due ON snippet(due);
 
 -- Log of all snippet reviews
 CREATE TABLE IF NOT EXISTS snippet_review (
@@ -22,6 +23,7 @@ CREATE TABLE IF NOT EXISTS srs_card (
   reference TEXT NOT NULL UNIQUE, -- pointer to the card's location in the vault
   created_at INTEGER NOT NULL, -- unix timestamp
   due INTEGER NOT NULL,
+  dismissed INTEGER DEFAULT 0,
   last_review INTEGER,
   stability REAL NOT NULL,
   difficulty REAL NOT NULL,
@@ -34,6 +36,7 @@ CREATE TABLE IF NOT EXISTS srs_card (
 );
 
 CREATE INDEX IF NOT EXISTS srs_card_reference ON srs_card(reference);
+CREATE INDEX IF NOT EXISTS srs_card_due ON srs_card(due);
 
 CREATE TABLE IF NOT EXISTS srs_card_review (
   id TEXT NOT NULL, -- UUID

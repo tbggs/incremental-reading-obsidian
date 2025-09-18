@@ -1,4 +1,5 @@
-import type { App, Editor, MarkdownView, WorkspaceLeaf } from 'obsidian';
+import type { App, Editor, WorkspaceLeaf } from 'obsidian';
+import { MarkdownView, View } from 'obsidian';
 import {
   addIcon,
   Modal,
@@ -40,9 +41,9 @@ export default class IncrementalReadingPlugin extends Plugin {
     const ribbonIconEl = this.addRibbonIcon(
       PLUGIN_ICON,
       'Incremental Reading',
-      (evt: MouseEvent) => {
+      async (evt: MouseEvent) => {
         // Called when the user clicks the icon.
-        new Notice('This is a notice!');
+        await this.learn();
       }
     );
     // Perform additional things with the ribbon
@@ -61,13 +62,18 @@ export default class IncrementalReadingPlugin extends Plugin {
           modifiers: ['Alt'],
           key: 'X',
         },
-      ], // TODO: add setting to customize
-      editorCallback: (editor: Editor, view: MarkdownView) => {
-        if (!this.#reviewManager) {
-          new Notice(`Plugin still loading`);
-          return;
+      ], // TODO: add setting to customize hotkey
+      callback: async () => {
+        const reviewView = this.app.workspace.getActiveViewOfType(ReviewView);
+        if (reviewView) {
+          return this.#reviewManager.createSnippet(reviewView);
         }
-        return this.#reviewManager.createSnippet(view);
+
+        const markdownView =
+          this.app.workspace.getActiveViewOfType(MarkdownView);
+        if (markdownView) {
+          return this.#reviewManager.createSnippet(markdownView);
+        }
       },
     });
 
@@ -90,24 +96,13 @@ export default class IncrementalReadingPlugin extends Plugin {
     });
 
     this.addCommand({
-      id: 'begin learning',
+      id: 'learn',
       name: 'Learn',
-      callback: async () => {
-        let leaf: WorkspaceLeaf | null = null;
-        const leaves = this.app.workspace.getLeavesOfType(ReviewView.viewType);
-
-        if (leaves.length > 0) {
-          leaf = leaves[0];
-        } else {
-          leaf = this.app.workspace.getLeaf();
-          await leaf.setViewState({ type: ReviewView.viewType, active: true });
-        }
-
-        this.app.workspace.revealLeaf(leaf);
-      },
+      callback: () => this.learn.call(this),
     });
 
     this.addCommand({
+      // TODO: remove after done testing
       id: 'list-snippets-and-cards',
       name: 'List snippets and cards',
       callback: async () => {
@@ -115,8 +110,12 @@ export default class IncrementalReadingPlugin extends Plugin {
           new Notice(`Plugin still loading`);
           return;
         }
-        const snippets = await this.#reviewManager.fetchSnippets();
-        const cards = await this.#reviewManager.fetchCards();
+        const snippets = await this.#reviewManager._fetchSnippetData({
+          includeDismissed: true,
+        });
+        const cards = await this.#reviewManager._fetchCardData({
+          includeDismissed: true,
+        });
 
         // await this.repo?.query('SELECT rowid, * FROM snippet');
         if (!snippets && !cards) {
@@ -239,6 +238,21 @@ export default class IncrementalReadingPlugin extends Plugin {
 
   async saveSettings() {
     await this.saveData(this.settings);
+  }
+
+  async learn() {
+    let leaf: WorkspaceLeaf | null = null;
+    const leaves = this.app.workspace.getLeavesOfType(ReviewView.viewType);
+
+    if (leaves.length > 0) {
+      leaf = leaves[0];
+    } else {
+      leaf = this.app.workspace.getLeaf('tab');
+      await leaf.setViewState({ type: ReviewView.viewType, active: true });
+      // await leaf.open(new ReviewView(leaf, this.#reviewManager));
+    }
+
+    await this.app.workspace.revealLeaf(leaf);
   }
 }
 

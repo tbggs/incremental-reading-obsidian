@@ -25,6 +25,8 @@ export const CONTENT_TITLE_SLICE_LENGTH = 25;
 export const SNIPPET_SLICE_LENGTH = 30;
 
 export const MS_PER_DAY = 1000 * 86_400;
+/** Local time to roll over to a new day. Defaults to 0400 (4 AM) */
+export const DAY_ROLLOVER_OFFSET_HOURS = 4;
 
 // TODO: replace once inferring TS types from schema
 export const TABLE_NAMES = Object.freeze([
@@ -35,3 +37,13 @@ export const TABLE_NAMES = Object.freeze([
 ] as const);
 
 export const SNIPPET_FALLBACK_REVIEW_INTERVAL = MS_PER_DAY * 1;
+
+export const SNIPPET_REVIEW_INTERVALS = {
+  AGAIN: 1,
+  TOMORROW: MS_PER_DAY,
+  THREE_DAYS: 3 * MS_PER_DAY,
+  ONE_WEEK: 7 * MS_PER_DAY,
+};
+
+/** Number of rows to fetch at a time when reviewing */
+export const REVIEW_FETCH_COUNT = 50;

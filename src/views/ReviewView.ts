@@ -1,12 +1,26 @@
-import type { WorkspaceLeaf, TFile } from 'obsidian';
+import type { WorkspaceLeaf, TFile, IconName } from 'obsidian';
 import { ItemView, MarkdownRenderer } from 'obsidian';
-import { SNIPPET_FALLBACK_REVIEW_INTERVAL } from 'src/lib/constants';
+import type { ISnippet, ISRSCard } from 'src/db/types';
+import {
+  MS_PER_DAY,
+  SNIPPET_FALLBACK_REVIEW_INTERVAL,
+  SNIPPET_REVIEW_INTERVALS,
+  SUCCESS_NOTICE_DURATION_MS,
+} from 'src/lib/constants';
 import type ReviewManager from 'src/lib/ReviewManager';
+import type { Grade } from 'ts-fsrs';
+import { Rating } from 'ts-fsrs';
+
+type ReviewItem = {
+  data: ISRSCard | ISnippet;
+  file: TFile;
+};
 
 export default class ReviewView extends ItemView {
   static #viewType = 'incremental-reading-review';
   #reviewManager: ReviewManager;
-  private currentFile: TFile | null = null;
+  private reviewQueue: ReviewItem[] | null = null;
+  private currentItem: { data: ISRSCard | ISnippet; file: TFile } | null = null;
   private markdownContainer: HTMLElement | null = null;
   private buttonContainer: HTMLElement | null = null;
 
@@ -24,61 +38,104 @@ export default class ReviewView extends ItemView {
   }
 
   getDisplayText(): string {
-    return 'Incremental Reading: Review';
+    return 'Incremental Reading';
+  }
+
+  getIcon(): IconName {
+    return 'book-open-text';
+  }
+
+  get file() {
+    return this.currentItem?.file ?? null;
+  }
+
+  /**
+   * Get selected text from the rendered markdown content.
+   * This allows snippet creation from ReviewView
+   */
+  getSelection(): string {
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) {
+      return '';
+    }
+
+    // Check if the selection is within our markdown container
+    const range = selection.getRangeAt(0);
+    if (!this.markdownContainer?.contains(range.commonAncestorContainer)) {
+      return '';
+    }
+
+    return selection.toString().trim();
   }
 
   async onOpen() {
-    const dueTime = Date.now() + 5 * SNIPPET_FALLBACK_REVIEW_INTERVAL; // TODO: remove after testing
-    const itemsDue = await this.#reviewManager.getDue(dueTime);
-    await this.buildHtml();
-    console.log({ itemsDue });
-    if (itemsDue && itemsDue.all.length) {
-      const nextDueFile = await this.#reviewManager.getNote(
-        itemsDue.all[0].reference
-      );
-
-      console.log({ nextDueFile });
-      if (!nextDueFile) return;
-
-      await this.loadFile(nextDueFile);
-    }
-  }
-
-  async loadFile(file: TFile) {
-    this.currentFile = file;
-    if (this.markdownContainer) {
-      await this.renderMarkdownContent();
-    }
+    const due = await this.#reviewManager.getDue({ dueBy: this.getDueTime() });
+    this.reviewQueue = [...due.all].reverse();
+    await this.showNextDue();
   }
 
   async onClose() {
     // Cleanup if needed
   }
 
-  async buildHtml() {
+  async refreshQueue() {
+    if (!this.reviewQueue || !this.reviewQueue.length) {
+      this.reviewQueue = (
+        await this.#reviewManager.getDue({ dueBy: this.getDueTime() })
+      ).all.reverse();
+    }
+    if (this.reviewQueue.length) {
+      this.currentItem = this.reviewQueue.pop() ?? null;
+    }
+  }
+  // TODO: change to end of day accounting for day rollover offset
+  getDueTime() {
+    return Date.now() + 7 * SNIPPET_FALLBACK_REVIEW_INTERVAL;
+  }
+
+  async showNextDue() {
+    await this.refreshQueue();
+    if (!this.currentItem) {
+      // TODO: move fallback HTML logic here
+      await this.buildHtml();
+      return;
+    }
+
+    await this.buildHtml(this.currentItem);
+    await this.renderMarkdownContent(this.currentItem);
+  }
+
+  async buildHtml(item?: ReviewItem) {
     const container = this.containerEl;
     container.empty();
 
-    // Create the main layout
     container.addClass('review-view-container');
 
-    // Create markdown container (takes up most of the space)
-    this.markdownContainer = container.createDiv({
-      cls: 'review-markdown-container',
-    });
-
-    // Create button container at the bottom
     this.buttonContainer = container.createDiv({
       cls: 'review-button-container',
     });
 
-    if (!this.currentFile) {
+    this.markdownContainer = container.createDiv({
+      cls: 'review-markdown-container',
+    });
+    this.markdownContainer.addClasses([
+      'markdown-preview-view',
+      'markdown-rendered',
+      'node-insert-event',
+      'is-readable-line-width',
+      'allow-fold-headings',
+      'allow-fold-lists',
+      'show-indentation-guide',
+      'show-properties',
+    ]);
+
+    if (!this.reviewQueue?.length) {
       // Show placeholder if no file loaded
       this.showPlaceholder();
     }
 
     // Create the button bar
-    this.createButtonBar();
+    this.createButtonBar(item);
 
     // Add CSS for layout
     this.addStyles();
@@ -89,19 +146,18 @@ export default class ReviewView extends ItemView {
 
     this.markdownContainer.empty();
     this.markdownContainer.createDiv({
-      text: 'No file loaded. Use loadFile() to display content.',
+      text: 'Nothing due for review.',
       cls: 'review-placeholder',
     });
   }
 
-  private async renderMarkdownContent() {
-    if (!this.markdownContainer || !this.currentFile) return;
+  private async renderMarkdownContent(item: ReviewItem) {
+    if (!this.markdownContainer) return;
 
     this.markdownContainer.empty();
 
     try {
-      const content = await this.app.vault.read(this.currentFile);
-      console.log('ReviewView rendering content:', content);
+      const content = await this.app.vault.read(item.file);
 
       // Create a content div for the rendered markdown
       const contentDiv = this.markdownContainer.createDiv({
@@ -113,7 +169,7 @@ export default class ReviewView extends ItemView {
         this.app,
         content,
         contentDiv,
-        this.currentFile.path,
+        item.file.path,
         this
       );
     } catch (error) {
@@ -124,15 +180,107 @@ export default class ReviewView extends ItemView {
     }
   }
 
-  private createButtonBar() {
+  private createButtonBar(item?: ReviewItem) {
     if (!this.buttonContainer) return;
 
-    const buttons = [
-      { title: 'Grade Easy', icon: '👍', action: () => this.gradeCard('easy') },
-      { title: 'Grade Good', icon: '✅', action: () => this.gradeCard('good') },
-      { title: 'Grade Hard', icon: '👎', action: () => this.gradeCard('hard') },
-      { title: 'Next Review', icon: '➡️', action: () => this.nextReview() },
-    ];
+    const buttons: {
+      title: string;
+      icon: string;
+      action: () => Promise<void>;
+    }[] = []; // TODO: button to show queue as a paginated table
+    if (!item) {
+      // TODO: buttons to show only when no items are selected
+    } else if ('state' in item.data) {
+      const card = item.data;
+      buttons.push(
+        {
+          title: '(1) Again',
+          icon: '🔁',
+          action: async () => {
+            await this.gradeCard(card, Rating.Again);
+          },
+        },
+        {
+          title: '(2) Hard',
+          icon: '👎',
+          action: async () => {
+            await this.gradeCard(card, Rating.Hard);
+          },
+        },
+        {
+          title: '(3) Good',
+          icon: '👍',
+          action: async () => {
+            await this.gradeCard(card, Rating.Good);
+          },
+        },
+        {
+          title: '(4) Easy',
+          icon: '✅',
+          action: async () => {
+            await this.gradeCard(card, Rating.Easy);
+          },
+        }
+        // {
+        //   title: '(0) Manual',
+        //   icon: '👎',
+        //   action: async () => {
+        //     await this.gradeCard(card, Rating.Manual);
+        //     await this.showNextDue();
+        //   },
+        // }
+        // {
+        //   title: 'Skip for now',
+        //   icon: '➡️',
+        //   action: async () => this.nextReview(),
+        // }
+      );
+    } else if ('dismissed' in item.data) {
+      const snippet = item.data;
+      buttons.push(
+        {
+          title: '(1) Again',
+          icon: '🔁',
+          action: async () =>
+            await this.reviewSnippet(snippet, SNIPPET_REVIEW_INTERVALS.AGAIN),
+        },
+        {
+          title: '(2) Tomorrow',
+          icon: '☀',
+          action: async () =>
+            await this.reviewSnippet(
+              snippet,
+              SNIPPET_REVIEW_INTERVALS.TOMORROW
+            ),
+        },
+        {
+          title: '(3) Three Days',
+          icon: '📅',
+          action: async () =>
+            await this.reviewSnippet(
+              snippet,
+              SNIPPET_REVIEW_INTERVALS.THREE_DAYS
+            ),
+        },
+        {
+          title: '(4) One Week',
+          icon: '↩',
+          action: async () =>
+            await this.reviewSnippet(
+              snippet,
+              SNIPPET_REVIEW_INTERVALS.ONE_WEEK
+            ),
+        },
+        {
+          title: 'Dismiss',
+          icon: '❌',
+          action: async () => {
+            await this.#reviewManager.dismissSnippet(snippet);
+            await this.showNextDue();
+          },
+        }
+      );
+    }
 
     buttons.forEach((button) => {
       const buttonEl = this.buttonContainer!.createEl('button', {
@@ -141,6 +289,25 @@ export default class ReviewView extends ItemView {
       });
       buttonEl.addEventListener('click', button.action);
     });
+    // TODO: hotkeys
+  }
+
+  // Button action methods
+  private async gradeCard(card: ISRSCard, grade: Grade) {
+    new Notice(`Graded as: ${grade}`);
+    await this.#reviewManager.reviewCard(card, grade);
+    await this.showNextDue();
+  }
+
+  // Button action methods
+  private async reviewSnippet(snippet: ISnippet, nextInterval: number) {
+    new Notice(
+      `Marking snippet reviewed with next interval of ${Math.round((10 * nextInterval) / MS_PER_DAY) / 10} days`,
+      SUCCESS_NOTICE_DURATION_MS
+    );
+
+    await this.#reviewManager.reviewSnippet(snippet, Date.now(), nextInterval);
+    await this.showNextDue();
   }
 
   private addStyles() {
@@ -154,14 +321,13 @@ export default class ReviewView extends ItemView {
       }
       
       .review-markdown-container {
-        flex: 1;
         overflow: auto;
         padding: 16px;
         background: var(--background-primary);
       }
       
       .review-content {
-        height: 100%;
+        height: auto;
       }
       
       .review-placeholder {
@@ -211,16 +377,5 @@ export default class ReviewView extends ItemView {
         color: var(--text-on-accent);
       }
     `;
-  }
-
-  // Button action methods
-  private gradeCard(difficulty: 'easy' | 'good' | 'hard') {
-    console.log(`Graded as: ${difficulty}`);
-    // Implement your grading logic here
-  }
-
-  private nextReview() {
-    console.log('Moving to next review');
-    // Implement your next review logic here
   }
 }

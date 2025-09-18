@@ -1,9 +1,4 @@
-import type {
-  TFile,
-  SectionCache,
-  CachedMetadata,
-  TAbstractFile,
-} from 'obsidian';
+import type { TFile, TAbstractFile } from 'obsidian';
 import {
   normalizePath,
   Notice,
@@ -12,10 +7,8 @@ import {
   type MarkdownView,
 } from 'obsidian';
 import type { SQLiteRepository } from 'src/db/repository';
-import type { ISnippet, ISRSCard, TableName } from 'src/db/types';
+import type { ISnippet, ISRSCard } from 'src/db/types';
 import {
-  MS_PER_DAY,
-  SNIPPET_SLICE_LENGTH,
   SNIPPET_DIRECTORY,
   SNIPPET_FALLBACK_REVIEW_INTERVAL,
   SNIPPET_TAG,
@@ -24,17 +17,15 @@ import {
   SUCCESS_NOTICE_DURATION_MS,
   CARD_DIRECTORY,
   CARD_TAG,
+  REVIEW_FETCH_COUNT,
+  SNIPPET_REVIEW_INTERVALS,
 } from './constants';
-import type { Card, FSRS, FSRSParameters, Grade } from 'ts-fsrs';
-import { createEmptyCard, fsrs, generatorParameters } from 'ts-fsrs';
-import {
-  compareDates,
-  createFile,
-  createTitle,
-  getContentSlice,
-} from './utils';
+import type { FSRS, FSRSParameters, Grade } from 'ts-fsrs';
+import { fsrs, generatorParameters } from 'ts-fsrs';
+import { compareDates, createFile, createTitle } from './utils';
 import SRSCard from './card';
 import { randomUUID } from 'crypto';
+import type ReviewView from 'src/views/ReviewView';
 
 const FSRS_PARAMETER_DEFAULTS: Partial<FSRSParameters> = {
   enable_fuzz: false,
@@ -54,6 +45,61 @@ export default class ReviewManager {
     this.#fsrs = fsrs(params);
   }
 
+  protected getEndOfToday() {
+    // TODO: get the time; if before DAY_ROLLOVER_OFFSET, return today's rollover time; else return tomorrow's
+  }
+
+  async getCardsDue(
+    dueBy?: number,
+    limit?: number
+  ): Promise<{ data: SRSCard; file: TFile }[]> {
+    const dueTime = dueBy ?? Date.now();
+    try {
+      const cardsDue = (
+        await this._fetchCardData({ dueBy: dueTime, limit })
+      ).map(
+        async (item) => ({
+          data: item,
+          file: await this.getNote(item.reference),
+        }),
+        this
+      );
+      const result = await Promise.all(cardsDue);
+      return result.filter(
+        (card): card is { data: SRSCard; file: TFile } => card.file !== null
+      );
+    } catch (error) {
+      console.error(error);
+      return [];
+    }
+  }
+
+  async getSnippetsDue(
+    dueBy?: number,
+    limit?: number
+  ): Promise<{ data: ISnippet; file: TFile }[]> {
+    const dueTime = dueBy ?? Date.now();
+    try {
+      const snippetsDue = (
+        await this._fetchSnippetData({ dueBy: dueTime, limit })
+      ).map(
+        async (item) => ({
+          data: item,
+          file: await this.getNote(item.reference),
+        }),
+        this
+      );
+      const result = await Promise.all(snippetsDue);
+      return result.filter(
+        (snippet): snippet is { data: ISnippet; file: TFile } =>
+          snippet.file !== null
+      );
+    } catch (error) {
+      console.error(error);
+      return [];
+    }
+  }
+
   /**
    * Fetch all snippets and cards ready for review, then order by due ASC
    * TODO:
@@ -61,21 +107,42 @@ export default class ReviewManager {
    * - invalidate after some time (e.g., the configured minimum review interval)
    * @param dueBy Unix timestamp. Defaults to current time.
    */
-  async getDue(dueBy?: number, limit?: number) {
-    const dueTime = dueBy ?? Date.now();
+  async getDue({
+    dueBy,
+    limit = REVIEW_FETCH_COUNT,
+  }: {
+    dueBy?: number;
+    limit?: number;
+  }) {
     try {
-      const cardsDue = await this.fetchCards({ dueBy: dueTime, limit });
-      const snippetsDue = await this.fetchSnippets({ dueBy: dueTime, limit });
-      console.log({ cardsDue, snippetsDue });
+      const cardsDue = await this.getCardsDue(dueBy, limit);
+      const snippetsDue = await this.getSnippetsDue(dueBy, limit);
       const allDue = [...cardsDue, ...snippetsDue].sort((a, b) =>
-        compareDates(a.due, b.due)
+        compareDates(a.data.due, b.data.due)
       );
-      console.log({ allDue, cardsDue, snippetsDue });
       return { all: allDue, cards: cardsDue, snippets: snippetsDue };
     } catch (error) {
       console.error(error);
+      return { all: [], cards: [], snippets: [] };
     }
   }
+
+  // /**
+  //  * Get the data and file for the next due review item, or null if none are due
+  //  */
+  // async getNextDue(dueBy?: number) {
+  //   try {
+  //     const allDue = await this.getDue({ dueBy, limit: 1 });
+  //     if (!allDue || !allDue.all.length) return null;
+
+  //     const dueItem = allDue.all[0];
+
+  //     return { data: dueItem, file: dueFile };
+  //   } catch (error) {
+  //     console.error(error);
+  //     return null;
+  //   }
+  // }
 
   // #region CARDS
   /**
@@ -107,7 +174,6 @@ export default class ReviewManager {
       content = blockContent;
     }
 
-    console.log({ content, selection });
     try {
       // Create the card from the content
       // TODO: Implement card creation logic
@@ -138,7 +204,9 @@ export default class ReviewManager {
         card.state,
       ];
       const insertResult = await this.#repo.mutate(
-        'INSERT INTO srs_card (id, reference, created_at, due, last_review, stability, difficulty, elapsed_days, scheduled_days, reps, lapses, state) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)',
+        `INSERT INTO srs_card (id, reference, created_at, due, last_review, ` +
+          `stability, difficulty, elapsed_days, scheduled_days, reps, lapses, state) ` +
+          `VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
         params
       );
 
@@ -147,7 +215,7 @@ export default class ReviewManager {
           card.id,
         ])
       )[0];
-      console.log('created card:', fetchedCard);
+
       return card;
     } catch (error) {
       console.error(error);
@@ -155,17 +223,34 @@ export default class ReviewManager {
     }
   }
 
-  async fetchCards(opts?: { dueBy?: number; limit?: number }) {
+  async _fetchCardData(opts?: {
+    dueBy?: number;
+    limit?: number;
+    includeDismissed?: boolean;
+  }) {
     let query = 'SELECT * FROM srs_card';
-    let params = [];
+    const conditions = [];
+    const params = [];
     if (opts?.dueBy) {
       params.push(opts?.dueBy);
-      query += ` WHERE due <= $${params.length}`;
+      conditions.push(`due <= $${params.length}`);
     }
+    if (!opts?.includeDismissed) {
+      conditions.push('dismissed = 0');
+    }
+
+    if (conditions.length) {
+      query += ' WHERE ' + conditions.join(' AND ');
+    }
+
+    query += ' ORDER BY due ASC';
+
     if (opts?.limit) {
       params.push(opts?.limit);
       query += ` LIMIT $${params.length}`;
     }
+
+    console.log({ query, params });
     return ((await this.#repo.query(query, params)) ?? []) as SRSCard[];
   }
 
@@ -190,6 +275,8 @@ export default class ReviewManager {
         return result;
       }
     );
+
+    console.log({ recordLog });
   }
   // #endregion
 
@@ -202,9 +289,14 @@ export default class ReviewManager {
    * - selections from web viewer
    * - selections from native PDF viewer
    */
-  async createSnippet(view: MarkdownView) {
+  async createSnippet(view: MarkdownView | ReviewView, firstReview?: number) {
+    const reviewTime =
+      firstReview || Date.now() + SNIPPET_REVIEW_INTERVALS.AGAIN; // TODO: change to tomorrow
     if (!view.file) {
-      new Notice(`A markdown file must be active`, ERROR_NOTICE_DURATION_MS);
+      new Notice(
+        `View type not supported for snippets`,
+        ERROR_NOTICE_DURATION_MS
+      );
       return;
     }
     const selection = view.getSelection();
@@ -224,22 +316,18 @@ export default class ReviewManager {
       [`${SOURCE_PROPERTY_NAME}`]: sourceLink,
     });
 
-    return this.createSnippetFromFile(snippetFile);
+    return this.createSnippetFromFile(snippetFile, reviewTime);
   }
 
   /**
    * Given a preexisting snippet file, insert into database
    */
-  async createSnippetFromFile(snippetFile: TFile) {
+  async createSnippetFromFile(snippetFile: TFile, reviewTime: number) {
     try {
       // save the snippet to the database
       const result = await this.#repo.mutate(
         'INSERT INTO snippet (id, reference, due) VALUES ($1, $2, $3)',
-        [
-          randomUUID(),
-          `${SNIPPET_DIRECTORY}/${snippetFile.name}`,
-          Date.now() + MS_PER_DAY,
-        ]
+        [randomUUID(), `${SNIPPET_DIRECTORY}/${snippetFile.name}`, reviewTime]
       );
 
       // TODO: verify this correctly catches failed inserts
@@ -257,17 +345,34 @@ export default class ReviewManager {
     }
   }
 
-  async fetchSnippets(opts?: { dueBy?: number; limit?: number }) {
+  async _fetchSnippetData(opts?: {
+    dueBy?: number;
+    limit?: number;
+    includeDismissed?: boolean;
+  }) {
     let query = 'SELECT * FROM snippet';
-    let params = [];
+    const conditions = [];
+    const params = [];
     if (opts?.dueBy) {
       params.push(opts?.dueBy);
-      query += ` WHERE due <= $${params.length}`;
+      conditions.push(`due <= $${params.length}`);
     }
+    if (!opts?.includeDismissed) {
+      conditions.push('dismissed = 0');
+    }
+
+    if (conditions.length) {
+      query += ' WHERE ' + conditions.join(' AND ');
+    }
+
+    query += ' ORDER BY due ASC';
+
     if (opts?.limit) {
       params.push(opts?.limit);
       query += ` LIMIT $${params.length}`;
     }
+
+    console.log({ query, params });
     return ((await this.#repo.query(query, params)) ?? []) as ISnippet[];
   }
 
@@ -284,33 +389,32 @@ export default class ReviewManager {
   async reviewSnippet(
     snippet: ISnippet,
     reviewTime?: number,
-    nextReviewTime?: number
+    nextReviewInterval?: number
   ) {
     const reviewed = reviewTime || Date.now();
     const nextReview =
-      nextReviewTime || Date.now() + SNIPPET_FALLBACK_REVIEW_INTERVAL;
+      reviewed + (nextReviewInterval ?? SNIPPET_FALLBACK_REVIEW_INTERVAL);
     try {
       const insertReviewResult = await this.#repo.mutate(
-        'INSERT INTO snippet_review (id, snippet_id, review_time) VALUES ($1, $2, $3)'[
-          (randomUUID(), snippet.id, reviewed)
-        ]
+        'INSERT INTO snippet_review (id, snippet_id, review_time) VALUES ($1, $2, $3)',
+        [randomUUID(), snippet.id, reviewed]
       );
-      // const insertReviewResult = await this.#db
-      //   .insert('snippet_review')
-      //   .columns('review_time')
-      //   .values({
-      //     id: randomUUID(),
-      //     snippet_id: snippet.id,
-      //     review_time: reviewed,
-      //   })
-      //   .execute();
 
       const updateSnippetResult = await this.#repo.mutate(
         `UPDATE snippet SET due = $1 WHERE id = $2`,
         [nextReview, snippet.id]
       );
+    } catch (error) {
+      console.error(error);
+    }
+  }
 
-      console.log({ insertReviewResult, updateSnippetResult });
+  async dismissSnippet(snippet: ISnippet) {
+    try {
+      await this.#repo.mutate(
+        'UPDATE snippet SET dismissed = 1 WHERE id = $1',
+        [snippet.id]
+      );
     } catch (error) {
       console.error(error);
     }
