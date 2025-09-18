@@ -1,7 +1,6 @@
 import * as manifestData from 'src/../manifest.json';
 
 export const PLUGIN_ID = manifestData.id;
-// const WASM_FILE_PATH = './node_modules/sql.js/dist/sql-wasm.wasm'; // TODO: find a way to import properly
 export const PLACEHOLDER_PLUGIN_ICON = 'book-open-text';
 
 // TODO: move to settings
@@ -9,8 +8,8 @@ export const WASM_FILE_NAME = 'sql-wasm.wasm';
 export const DATABASE_FILE_PATH = './ir-user-data.sqlite';
 export const TEST_DATABASE_FILE_PATH = './ir-test-data.sqlite';
 export const SCHEMA_FILE_PATH = 'src/db/schema.sql';
-export const SNIPPET_DIRECTORY = 'increading/snippets';
-export const CARD_DIRECTORY = 'increading/cards';
+export const SNIPPET_DIRECTORY = 'incremental-reading/snippets';
+export const CARD_DIRECTORY = 'incremental-reading/cards';
 
 export const SNIPPET_TAG = 'ir-text-snippet';
 export const CARD_TAG = 'ir-card';
@@ -28,7 +27,6 @@ export const MS_PER_DAY = 1000 * 86_400;
 /** Local time to roll over to a new day. Defaults to 0400 (4 AM) */
 export const DAY_ROLLOVER_OFFSET_HOURS = 4;
 
-// TODO: replace once inferring TS types from schema
 export const TABLE_NAMES = Object.freeze([
   'snippet',
   'snippet_review',
