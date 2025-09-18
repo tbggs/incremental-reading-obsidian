@@ -1,6 +1,6 @@
 import * as manifestData from 'src/../manifest.json';
 
-export const pluginId = manifestData.id;
+export const PLUGIN_ID = manifestData.id;
 // const WASM_FILE_PATH = './node_modules/sql.js/dist/sql-wasm.wasm'; // TODO: find a way to import properly
 
 // TODO: move to settings

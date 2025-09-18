@@ -1,12 +1,9 @@
-import { normalizePath, TFile, type App, type DataAdapter } from 'obsidian';
+import { normalizePath, type App, type DataAdapter } from 'obsidian';
 import type { BindParams, Database, QueryExecResult } from 'sql.js';
 import initSqlJs from 'sql.js';
-import { pluginId, WASM_FILE_NAME } from '../lib/constants';
+import { PLUGIN_ID, WASM_FILE_NAME } from '../lib/constants';
 import type { Primitive } from '../lib/utility-types';
 import type { RowTypes } from './types';
-// import wasm from 'sql-wasm.wasm';
-
-// console.log({wasmType: typeof wasm});
 
 export class SQLiteRepository {
   app: App;
@@ -51,11 +48,8 @@ export class SQLiteRepository {
    * @returns an array of rows
    */
   async query(query: string, params: Primitive[] = []) {
-    console.log('query:', query);
-    console.log('params:', params);
     const result = await this.execSql(query, params);
     const rows = result?.[0];
-    console.log('queryResult:');
     console.table(rows);
     return rows;
   }
@@ -69,7 +63,6 @@ export class SQLiteRepository {
    */
   async mutate(query: string, params: Primitive[] = []) {
     const result = await this.execSql(query, params);
-    console.log('mutation result: ', result);
     if (result) {
       await this.save();
     }
@@ -107,21 +100,11 @@ export class SQLiteRepository {
    * @returns an array where each top-level element is the result of a query
    */
   async execSql(query: string, params: Primitive[] = []) {
-    // console.log('execSql args:', {
-    //   query,
-    //   coercedParams: this.coerceParams(params),
-    // });
     const results = this.db.exec(query, this.coerceParams(params));
-    // console.log('execSql result:', results);
-    // if (!results) return null;
     if (!results || !results.length) return [];
 
     // in SQL.js, selected rows are returned in form [{ columns: string[], values: Array<SQLValue[]> }]
     const formatted = results.map(this.formatResult);
-
-    // console.log(`formatted results:`);
-    // console.table(formatted);
-
     return formatted;
   }
 
@@ -228,7 +211,7 @@ export class SQLiteRepository {
     const pathSegments = [
       this.app.vault.configDir,
       'plugins',
-      pluginId,
+      PLUGIN_ID,
       fileName,
     ];
 
@@ -236,7 +219,6 @@ export class SQLiteRepository {
       pathSegments.unshift(this.app.vault.adapter.basePath);
     }
 
-    // console.log({ pathSegments });
     const basePath = pathSegments.join('/');
     return normalizePath(basePath);
   }
