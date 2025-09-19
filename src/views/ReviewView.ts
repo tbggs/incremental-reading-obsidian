@@ -128,6 +128,7 @@ export default class ReviewView extends ItemView {
       'allow-fold-lists',
       'show-indentation-guide',
       'show-properties',
+      'cm-sizer',
     ]);
 
     if (!this.reviewQueue?.length) {
@@ -324,7 +325,10 @@ export default class ReviewView extends ItemView {
       .review-markdown-container {
         overflow: auto;
         padding: 16px;
+        margin-left: auto;
+        margin-right: auto;
         background: var(--background-primary);
+        max-width: var(--file-line-width);
       }
       
       .review-content {
