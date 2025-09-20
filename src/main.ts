@@ -66,6 +66,10 @@ export default class IncrementalReadingPlugin extends Plugin {
         },
       ], // TODO: add setting to customize hotkey
       callback: async () => {
+        if (!this.#reviewManager) {
+          new Notice(`Plugin still loading`);
+          return;
+        }
         const reviewView = this.app.workspace.getActiveViewOfType(ReviewView);
         if (reviewView) {
           return this.#reviewManager.createSnippet(reviewView);
@@ -166,7 +170,7 @@ export default class IncrementalReadingPlugin extends Plugin {
         await repo.mutate(`DELETE FROM snippet`);
         const rows = (await repo.query(`SELECT * FROM snippet`)) as ISnippet[];
 
-        if (!rows) return;
+        if (!rows.length) return;
         new Notice(
           `Failed to delete all snippets from database`,
           ERROR_NOTICE_DURATION_MS
@@ -196,7 +200,7 @@ export default class IncrementalReadingPlugin extends Plugin {
           `SELECT * FROM srs_card`
         )) as SRSCardRow[];
 
-        if (!rows) return;
+        if (!rows.length) return;
         new Notice(
           `Failed to delete all SRS cards from database`,
           ERROR_NOTICE_DURATION_MS

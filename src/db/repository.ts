@@ -49,8 +49,7 @@ export class SQLiteRepository {
    */
   async query(query: string, params: Primitive[] = []) {
     const result = await this.execSql(query, params);
-    const rows = result?.[0];
-    console.table(rows);
+    const rows = result[0];
     return rows;
   }
 
@@ -101,7 +100,7 @@ export class SQLiteRepository {
    */
   async execSql(query: string, params: Primitive[] = []) {
     const results = this.db.exec(query, this.coerceParams(params));
-    if (!results || !results.length) return [];
+    if (!results || !results.length) return [[]];
 
     // in SQL.js, selected rows are returned in form [{ columns: string[], values: Array<SQLValue[]> }]
     const formatted = results.map(this.formatResult);
