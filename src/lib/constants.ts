@@ -45,3 +45,10 @@ export const SNIPPET_REVIEW_INTERVALS = {
 
 /** Number of rows to fetch at a time when reviewing */
 export const REVIEW_FETCH_COUNT = 50;
+
+export const CLOZE_DELIMITERS = ['{{', '}}'];
+
+export const clozeDelimiterPattern = new RegExp(
+  `${CLOZE_DELIMITERS[0]}(.*?)${CLOZE_DELIMITERS[1]}`,
+  'g'
+);

@@ -9,6 +9,7 @@ import {
   SUCCESS_NOTICE_DURATION_MS,
 } from 'src/lib/constants';
 import type ReviewManager from 'src/lib/ReviewManager';
+import { searchAll } from 'src/lib/utils';
 import type { Grade } from 'ts-fsrs';
 import { Rating } from 'ts-fsrs';
 
@@ -153,7 +154,10 @@ export default class ReviewView extends ItemView {
     });
   }
 
-  private async renderMarkdownContent(item: ReviewItem) {
+  private async renderMarkdownContent(
+    item: ReviewItem,
+    revealAnswer?: boolean
+  ) {
     if (!this.markdownContainer) return;
 
     this.markdownContainer.empty();
@@ -165,11 +169,22 @@ export default class ReviewView extends ItemView {
       const contentDiv = this.markdownContainer.createDiv({
         cls: 'review-content',
       });
+      let formattedContent = content;
+      if ('state' in item.data && !revealAnswer) {
+        const match = searchAll(content, clozeDelimiterPattern)[0];
+        if (!match) {
+          throw new Error(`Valid cloze delimiters not found in ${content}`);
+        }
 
+        const pre = content.slice(0, match.index);
+        const answer = `${CLOZE_DELIMITERS[0]}__${CLOZE_DELIMITERS[1]}`;
+        const post = content.slice(match.index + match.match.length);
+        formattedContent = pre + answer + post;
+      }
       // Render the markdown content
       await MarkdownRenderer.render(
         this.app,
-        content,
+        formattedContent,
         contentDiv,
         item.file.path,
         this
@@ -182,8 +197,9 @@ export default class ReviewView extends ItemView {
     }
   }
 
-  private createButtonBar(item?: ReviewItem) {
+  private createButtonBar(item?: ReviewItem, revealAnswer?: boolean) {
     if (!this.buttonContainer) return;
+    this.buttonContainer.empty();
 
     const buttons: {
       title: string;
@@ -194,49 +210,60 @@ export default class ReviewView extends ItemView {
       // TODO: buttons to show only when no items are selected
     } else if ('state' in item.data) {
       const card = item.data;
-      buttons.push(
-        {
-          title: '(1) Again',
-          icon: '🔁',
+      if (!revealAnswer) {
+        buttons.push({
+          title: 'Show Answer',
+          icon: '',
           action: async () => {
-            await this.gradeCard(card, Rating.Again);
+            await this.renderMarkdownContent(item, true);
+            this.createButtonBar(item, true);
           },
-        },
-        {
-          title: '(2) Hard',
-          icon: '👎',
-          action: async () => {
-            await this.gradeCard(card, Rating.Hard);
+        });
+      } else {
+        buttons.push(
+          {
+            title: '(1) Again',
+            icon: '🔁',
+            action: async () => {
+              await this.gradeCard(card, Rating.Again);
+            },
           },
-        },
-        {
-          title: '(3) Good',
-          icon: '👍',
-          action: async () => {
-            await this.gradeCard(card, Rating.Good);
+          {
+            title: '(2) Hard',
+            icon: '👎',
+            action: async () => {
+              await this.gradeCard(card, Rating.Hard);
+            },
           },
-        },
-        {
-          title: '(4) Easy',
-          icon: '✅',
-          action: async () => {
-            await this.gradeCard(card, Rating.Easy);
+          {
+            title: '(3) Good',
+            icon: '👍',
+            action: async () => {
+              await this.gradeCard(card, Rating.Good);
+            },
           },
-        }
-        // {
-        //   title: '(0) Manual',
-        //   icon: '👎',
-        //   action: async () => {
-        //     await this.gradeCard(card, Rating.Manual);
-        //     await this.showNextDue();
-        //   },
-        // }
-        // {
-        //   title: 'Skip for now',
-        //   icon: '➡️',
-        //   action: async () => this.nextReview(),
-        // }
-      );
+          {
+            title: '(4) Easy',
+            icon: '✅',
+            action: async () => {
+              await this.gradeCard(card, Rating.Easy);
+            },
+          }
+          // {
+          //   title: '(0) Manual',
+          //   icon: '👎',
+          //   action: async () => {
+          //     await this.gradeCard(card, Rating.Manual);
+          //     await this.showNextDue();
+          //   },
+          // }
+          // {
+          //   title: 'Skip for now',
+          //   icon: '➡️',
+          //   action: async () => this.nextReview(),
+          // }
+        );
+      }
     } else if ('dismissed' in item.data) {
       const snippet = item.data;
       buttons.push(

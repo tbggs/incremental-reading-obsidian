@@ -9,10 +9,12 @@ import {
   Setting,
 } from 'obsidian';
 import {
+  CARD_DIRECTORY,
   DATABASE_FILE_PATH,
   ERROR_NOTICE_DURATION_MS,
   PLACEHOLDER_PLUGIN_ICON,
   SCHEMA_FILE_PATH,
+  SNIPPET_DIRECTORY,
 } from './lib/constants';
 import { SQLiteRepository } from './db/repository';
 import ReviewManager from './lib/ReviewManager';
@@ -92,13 +94,33 @@ export default class IncrementalReadingPlugin extends Plugin {
           key: 'C',
         },
       ],
-      editorCallback: (editor: Editor, view: MarkdownView) => {
+      callback: () => {
         if (!this.#reviewManager) {
           new Notice(`Plugin still loading`);
           return;
         }
-        return this.#reviewManager.createCard(editor, view);
+        const editor = this.app.workspace.activeEditor?.editor;
+        if (!editor) {
+          return;
+        }
+        const reviewView = this.app.workspace.getActiveViewOfType(ReviewView);
+        if (reviewView) {
+          return this.#reviewManager.createCard(editor, reviewView);
+        }
+
+        const markdownView =
+          this.app.workspace.getActiveViewOfType(MarkdownView);
+        if (markdownView) {
+          return this.#reviewManager.createCard(editor, markdownView);
+        }
       },
+      // editorCallback: (editor: Editor, view: MarkdownView) => {
+      //   if (!this.#reviewManager) {
+      //     new Notice(`Plugin still loading`);
+      //     return;
+      //   }
+      //   return this.#reviewManager.createCard(editor, view);
+      // },
     });
 
     this.addCommand({
@@ -170,18 +192,22 @@ export default class IncrementalReadingPlugin extends Plugin {
         await repo.mutate(`DELETE FROM snippet`);
         const rows = (await repo.query(`SELECT * FROM snippet`)) as ISnippet[];
 
-        if (!rows.length) return;
-        new Notice(
-          `Failed to delete all snippets from database`,
-          ERROR_NOTICE_DURATION_MS
-        );
-        console.table(
-          rows.map((row) => ({
-            ...row,
-            due: row.due ? new Date(row.due).toString() : null,
-            dismissed: Boolean(row.dismissed),
-          }))
-        );
+        if (!rows.length) {
+          const snippetDir = this.app.vault.getFolderByPath(SNIPPET_DIRECTORY);
+          snippetDir && this.app.vault.trash(snippetDir, true);
+        } else {
+          new Notice(
+            `Failed to delete all snippets from database`,
+            ERROR_NOTICE_DURATION_MS
+          );
+          console.table(
+            rows.map((row) => ({
+              ...row,
+              due: row.due ? new Date(row.due).toString() : null,
+              dismissed: Boolean(row.dismissed),
+            }))
+          );
+        }
       },
     });
 
@@ -200,12 +226,16 @@ export default class IncrementalReadingPlugin extends Plugin {
           `SELECT * FROM srs_card`
         )) as SRSCardRow[];
 
-        if (!rows.length) return;
-        new Notice(
-          `Failed to delete all SRS cards from database`,
-          ERROR_NOTICE_DURATION_MS
-        );
-        console.table(rows.map(SRSCard.rowToDisplay));
+        if (!rows.length) {
+          const cardDir = this.app.vault.getFolderByPath(CARD_DIRECTORY);
+          cardDir && this.app.vault.trash(cardDir, true);
+        } else {
+          new Notice(
+            `Failed to delete all SRS cards from database`,
+            ERROR_NOTICE_DURATION_MS
+          );
+          console.table(rows.map(SRSCard.rowToDisplay));
+        }
       },
     });
 

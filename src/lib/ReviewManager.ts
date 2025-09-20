@@ -7,7 +7,12 @@ import {
   type MarkdownView,
 } from 'obsidian';
 import type { SQLiteRepository } from 'src/db/repository';
-import type { ISnippet, ISRSCard } from 'src/db/types';
+import type {
+  ISnippet,
+  ISnippetReview,
+  ISRSCard,
+  SRSCardRow,
+} from 'src/db/types';
 import {
   SNIPPET_DIRECTORY,
   SNIPPET_FALLBACK_REVIEW_INTERVAL,
@@ -19,10 +24,18 @@ import {
   CARD_TAG,
   REVIEW_FETCH_COUNT,
   SNIPPET_REVIEW_INTERVALS,
+  CLOZE_DELIMITERS,
+  clozeDelimiterPattern,
 } from './constants';
 import type { FSRS, FSRSParameters, Grade } from 'ts-fsrs';
 import { fsrs, generatorParameters } from 'ts-fsrs';
-import { compareDates, createFile, createTitle } from './utils';
+import {
+  compareDates,
+  createFile,
+  createTitle,
+  getSelectionWithBounds,
+  searchAll,
+} from './utils';
 import SRSCard from './card';
 import { randomUUID } from 'crypto';
 import type ReviewView from 'src/views/ReviewView';
@@ -43,6 +56,11 @@ export default class ReviewManager {
     const params = generatorParameters(FSRS_PARAMETER_DEFAULTS);
 
     this.#fsrs = fsrs(params);
+  }
+
+  // TODO: remove for production
+  get repo() {
+    return this.#repo;
   }
 
   protected getEndOfToday() {
@@ -144,51 +162,111 @@ export default class ReviewManager {
   //   }
   // }
 
+  /**
+   * If text is selected, adds cloze deletion delimiters around the selection
+   * and removes them elsewhere.
+   * If no text is selected, searches for preexisting delimiters.
+   * @param selectionOffsets the character positions of the selection relative
+   * to the start of the passed text
+   * @throws if no text is selected and no preexisting delimiters are found
+   */
+  protected delimitCardTexts(
+    text: string,
+    selectionOffsets: [number, number] | null
+  ): string[] {
+    const removeDelimiters = (text: string) =>
+      text
+        .replaceAll(CLOZE_DELIMITERS[0], '')
+        .replaceAll(CLOZE_DELIMITERS[1], '');
+    if (selectionOffsets) {
+      // remove preexisting delimiters
+      const pre = removeDelimiters(text.slice(0, selectionOffsets[0]));
+      const answer = text.slice(selectionOffsets[0], selectionOffsets[1]);
+      const post = removeDelimiters(text.slice(selectionOffsets[1]));
+      const result =
+        pre + `${CLOZE_DELIMITERS[0]} ${answer} ${CLOZE_DELIMITERS[1]}` + post;
+      return [result];
+    } else {
+      // find the first pair of valid delimiters and remove others
+      // TODO: create multiple cards
+      const matches = searchAll(text, clozeDelimiterPattern);
+      if (!matches.length) {
+        throw new Error(`No valid delimiters found in text:` + `\n\n${text}`);
+      }
+      // remove all other delimiters for each match
+      return matches.map(({ match, index }) => {
+        const pre = removeDelimiters(text.slice(0, index));
+        const post = removeDelimiters(text.slice(match.length + index));
+        return pre + match + post;
+      });
+    }
+  }
+
   // #region CARDS
   /**
    * Create an SRS item
    */
-  async createCard(editor: Editor, view: MarkdownView) {
+  async createCard(editor: Editor, view: MarkdownView | ReviewView) {
     const currentFile = view.file;
     if (!currentFile) {
       new Notice(`A markdown file must be active`, ERROR_NOTICE_DURATION_MS);
       return;
     }
 
-    const selection = view.getSelection();
-
-    // If there's a selection, use it; otherwise, get the current block
-    let content: string;
-    if (selection) {
-      content = selection;
-    } else {
-      // get the currently focused block(s)
-      const blockContent = this.getCurrentBlockContent(editor, currentFile);
-      if (!blockContent) {
-        new Notice(
-          'No block content found at cursor position',
-          ERROR_NOTICE_DURATION_MS
-        );
-        return;
-      }
-      content = blockContent;
+    const block = this.getCurrentContent(editor, currentFile);
+    // TODO: ensure block content is correct for bullet lists (should only use the current bullet) and code blocks (get the whole code block)
+    console.log('blockContent:', block);
+    if (!block) {
+      new Notice('No block content found', ERROR_NOTICE_DURATION_MS);
+      return;
     }
+    const { content, line: blockLine } = block;
+
+    const selectionBounds = getSelectionWithBounds(editor);
+    if (!selectionBounds) {
+      console.log('no selection');
+      return;
+    }
+    const { start, end, startOffset, endOffset } = selectionBounds;
 
     try {
+      const withDelimiters = this.delimitCardTexts(content, [
+        start.ch,
+        end.ch,
+      ])[0]; // TODO: create many cards at once and transclude/link all?
+      console.log('with delimiters:', withDelimiters);
+      const { card, cardFile } = await this.createCardFileAndRow(
+        withDelimiters,
+        currentFile
+      );
+      const linkToCard = this.generateMarkdownLink(cardFile, currentFile);
+      editor.replaceRange(
+        `!${linkToCard}`,
+        { line: blockLine, ch: 0 },
+        { line: blockLine + 1, ch: 0 }
+      );
+    } catch (error) {
+      new Notice(error);
+    }
+  }
+
+  protected async createCardFileAndRow(
+    delimitedText: string,
+    sourceFile: TFile
+  ) {
+    try {
       // Create the card from the content
-      // TODO: Implement card creation logic
-      // create the file as a snippet
-      const cardFile = await this.createFromText(content, CARD_DIRECTORY);
-      const sourceLink = this.generateMarkdownLink(currentFile, cardFile);
+      const cardFile = await this.createFromText(delimitedText, CARD_DIRECTORY);
+      const linkToSource = this.generateMarkdownLink(sourceFile, cardFile);
       await this.updateFrontMatter(cardFile, {
         tags: CARD_TAG,
-        [`${SOURCE_PROPERTY_NAME}`]: sourceLink,
+        [`${SOURCE_PROPERTY_NAME}`]: linkToSource,
       });
 
       // parse question/answer formatting
 
       // create the database entry as FSRS card + reference
-      const card = new SRSCard(cardFile.name);
+      const card = new SRSCard(cardFile.path);
       const params = [
         card.id,
         card.reference,
@@ -216,10 +294,11 @@ export default class ReviewManager {
         ])
       )[0];
 
-      return card;
+      return { card, cardFile };
     } catch (error) {
       console.error(error);
       // TODO: error handling
+      throw error;
     }
   }
 
@@ -251,7 +330,7 @@ export default class ReviewManager {
     }
 
     console.log({ query, params });
-    return ((await this.#repo.query(query, params)) ?? []) as SRSCard[];
+    return ((await this.#repo.query(query, params)) ?? []) as SRSCardRow[];
   }
 
   /**
@@ -545,6 +624,15 @@ export default class ReviewManager {
     const fullContent = editor.getValue();
 
     return fullContent.slice(sectionStart, sectionEnd);
+  }
+  /**
+   * (WIP) Get the block, bullet list item, or code block the cursor is currently within
+   */
+  getCurrentContent(editor: Editor, file: TFile) {
+    const cursor = editor.getCursor();
+    const block = editor.getLine(cursor.line);
+
+    return { content: block, line: cursor.line };
   }
   // #endregion
 }

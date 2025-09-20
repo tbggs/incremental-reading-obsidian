@@ -32,7 +32,7 @@ CREATE TABLE IF NOT EXISTS srs_card (
   scheduled_days REAL NOT NULL,
   reps INTEGER NOT NULL DEFAULT 0,
   lapses INTEGER NOT NULL DEFAULT 0,
-  state INTEGER NOT NULL DEFAULT 0,
+  state TEXT NOT NULL,
   CHECK(state >= 0 AND state <= 3)
 );
 
@@ -50,6 +50,6 @@ CREATE TABLE IF NOT EXISTS srs_card_review (
   last_elapsed_days REAL NOT NULL,
   scheduled_days REAL NOT NULL,
   rating INTEGER NOT NULL,
-  state INTEGER NOT NULL DEFAULT 0,
+  state TEXT NOT NULL,
   CHECK(state >= 0 AND state <= 3 AND rating >= 0 AND rating <= 4)
 );
