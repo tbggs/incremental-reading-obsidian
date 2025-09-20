@@ -59,7 +59,7 @@ export class SQLiteRepository {
    *  TODO:
    * - handle errors better?
    * @param query
-   * @returns an array of rows
+   * @returns an empty array on success
    */
   async mutate(query: string, params: Primitive[] = []) {
     const result = await this.execSql(query, params);
