@@ -18,6 +18,8 @@ import { SQLiteRepository } from './db/repository';
 import ReviewManager from './lib/ReviewManager';
 import { State } from 'ts-fsrs';
 import ReviewView from './views/ReviewView';
+import type { ISnippet, SRSCardRow } from './db/types';
+import SRSCard from './lib/card';
 
 // Remember to rename these classes and interfaces!
 
@@ -151,33 +153,57 @@ export default class IncrementalReadingPlugin extends Plugin {
       },
     });
 
-    // this.addCommand({
-    //   // TODO: remove after done testing
-    //   id: 'delete-all-snippets',
-    //   name: 'DELETE all snippets',
-    //   callback: async () => {
-    //     if (!this.#db) {
-    //       new Notice(`SQLite database still loading`);
-    //       return;
-    //     }
-    //     const deleteResult = await this.#db.delete('snippet').execute();
-    //     const rows = await this.#db.select('snippet').execute();
+    this.addCommand({
+      // TODO: remove after done testing
+      id: 'delete-all-snippets',
+      name: 'DELETE all snippets',
+      callback: async () => {
+        if (!this.#reviewManager) {
+          new Notice(`SQLite database still loading`);
+          return;
+        }
+        const repo = this.#reviewManager.repo;
+        await repo.mutate(`DELETE FROM snippet`);
+        const rows = (await repo.query(`SELECT * FROM snippet`)) as ISnippet[];
 
-    //     // await this.repo?.query('SELECT rowid, * FROM snippet');
-    //     if (!rows) return;
-    //     new Notice(
-    //       `Failed to delete all snippets from database!`,
-    //       ERROR_NOTICE_DURATION_MS
-    //     );
-    //     console.table(
-    //       rows.map((row) => ({
-    //         ...row,
-    //         due: row.due ? new Date(row.due).toString() : null,
-    //         dismissed: Boolean(row.dismissed),
-    //       }))
-    //     );
-    //   },
-    // });
+        if (!rows) return;
+        new Notice(
+          `Failed to delete all snippets from database`,
+          ERROR_NOTICE_DURATION_MS
+        );
+        console.table(
+          rows.map((row) => ({
+            ...row,
+            due: row.due ? new Date(row.due).toString() : null,
+            dismissed: Boolean(row.dismissed),
+          }))
+        );
+      },
+    });
+
+    this.addCommand({
+      // TODO: remove after done testing
+      id: 'delete-all-cards',
+      name: 'DELETE all cards',
+      callback: async () => {
+        if (!this.#reviewManager) {
+          new Notice(`SQLite database still loading`);
+          return;
+        }
+        const repo = this.#reviewManager.repo;
+        await repo.mutate(`DELETE FROM srs_card`);
+        const rows = (await repo.query(
+          `SELECT * FROM srs_card`
+        )) as SRSCardRow[];
+
+        if (!rows) return;
+        new Notice(
+          `Failed to delete all SRS cards from database`,
+          ERROR_NOTICE_DURATION_MS
+        );
+        console.table(rows.map(SRSCard.rowToDisplay));
+      },
+    });
 
     // This adds a settings tab so the user can configure various aspects of the plugin
     // this.addSettingTab(new SampleSettingTab(this.app, this)); // TODO: set up settings
