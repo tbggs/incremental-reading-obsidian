@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS snippet (
   -- CHECK(due IS NOT NULL OR dismissed = TRUE) -- Enable this after testing
 );
 
+CREATE INDEX IF NOT EXISTS snippet_uuid ON snippet(id);
 CREATE INDEX IF NOT EXISTS snippet_reference ON snippet(reference);
 CREATE INDEX IF NOT EXISTS snippet_due ON snippet(due);
 
@@ -35,6 +36,7 @@ CREATE TABLE IF NOT EXISTS srs_card (
   CHECK(state >= 0 AND state <= 3)
 );
 
+CREATE INDEX IF NOT EXISTS srs_card_uuid ON srs_card(id);
 CREATE INDEX IF NOT EXISTS srs_card_reference ON srs_card(reference);
 CREATE INDEX IF NOT EXISTS srs_card_due ON srs_card(due);
 
