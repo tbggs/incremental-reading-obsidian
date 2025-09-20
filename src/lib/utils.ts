@@ -1,4 +1,4 @@
-import type { App, TFile } from 'obsidian';
+import type { App, Editor, TFile } from 'obsidian';
 import { CONTENT_TITLE_SLICE_LENGTH, FORBIDDEN_TITLE_CHARS } from './constants';
 
 export async function createFile(
@@ -115,4 +115,39 @@ export function compareDates(a: number | Date | null, b: number | Date | null) {
   );
 
   return aNum - bNum;
+}
+
+/**
+ * If text is selected, returns an object of the EditorPositions and offsets
+ * of the selection, or `null` otherwise.
+ */
+export function getSelectionWithBounds(editor: Editor) {
+  const selection = editor.getSelection();
+  if (!selection) return null;
+
+  const [start, end] = [editor.getCursor('from'), editor.getCursor('to')];
+  return {
+    selection,
+    start,
+    end,
+    startOffset: editor.posToOffset(start),
+    endOffset: editor.posToOffset(end),
+  };
+}
+
+/**
+ * Get the starting index and text of every match to a pattern
+ */
+export function searchAll(text: string, pattern: RegExp) {
+  let results: { match: string; index: number }[] = [];
+  const matches = text.matchAll(pattern);
+  while (true) {
+    const next = matches.next();
+    if (next.done) break;
+    const { index } = next.value;
+    const matchText = next.value[0];
+    results.push({ match: matchText, index: index });
+  }
+
+  return results;
 }
