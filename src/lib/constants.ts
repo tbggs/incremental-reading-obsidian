@@ -52,3 +52,5 @@ export const clozeDelimiterPattern = new RegExp(
   `${CLOZE_DELIMITERS[0]}(.*?)${CLOZE_DELIMITERS[1]}`,
   'g'
 );
+
+export const TRANSCLUSION_HIDE_TITLE_ALIAS = 'ir-hide-title';

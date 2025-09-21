@@ -27,6 +27,7 @@ import {
   SNIPPET_REVIEW_INTERVALS,
   CLOZE_DELIMITERS,
   clozeDelimiterPattern,
+  TRANSCLUSION_HIDE_TITLE_ALIAS,
 } from './constants';
 import type { FSRS, FSRSParameters, Grade } from 'ts-fsrs';
 import { fsrs, generatorParameters } from 'ts-fsrs';
@@ -175,7 +176,7 @@ export default class ReviewManager {
    */
   protected delimitCardTexts(
     text: string,
-    selectionOffsets: [number, number] | null
+    selectionOffsets: readonly [number, number] | null
   ): string[] {
     const removeDelimiters = (text: string) =>
       text
@@ -205,6 +206,15 @@ export default class ReviewManager {
     }
   }
 
+  transcludeLink(editor: Editor, link: string, blockLine: number) {
+    const line = editor.getLine(blockLine);
+    editor.replaceRange(
+      `!${link}`,
+      { line: blockLine, ch: 0 },
+      { line: blockLine, ch: line.length }
+    );
+  }
+
   // #region CARDS
   /**
    * Create an SRS item
@@ -226,28 +236,24 @@ export default class ReviewManager {
     const { content, line: blockLine } = block;
 
     const selectionBounds = getSelectionWithBounds(editor);
-    if (!selectionBounds) {
-      console.log('no selection');
-      return;
-    }
-    const { start, end, startOffset, endOffset } = selectionBounds;
+    const bounds = selectionBounds
+      ? ([selectionBounds.start.ch, selectionBounds.end.ch] as const)
+      : null;
 
     try {
-      const withDelimiters = this.delimitCardTexts(content, [
-        start.ch,
-        end.ch,
-      ])[0]; // TODO: create many cards at once and transclude/link all?
-      console.log('with delimiters:', withDelimiters);
+      const withDelimiters = this.delimitCardTexts(content, bounds)[0]; // TODO: create many cards at once and transclude/link all?
       const { card, cardFile } = await this.createCardFileAndRow(
         withDelimiters,
         currentFile
       );
-      const linkToCard = this.generateMarkdownLink(cardFile, currentFile);
-      editor.replaceRange(
-        `!${linkToCard}`,
-        { line: blockLine, ch: 0 },
-        { line: blockLine + 1, ch: 0 }
+      const linkToCard = this.generateMarkdownLink(
+        cardFile,
+        currentFile,
+        TRANSCLUSION_HIDE_TITLE_ALIAS
       );
+      this.transcludeLink(editor, linkToCard, blockLine);
+      // move the cursor to the next block
+      editor.setSelection({ line: blockLine + 1, ch: 0 });
     } catch (error) {
       new Notice(error);
     }
@@ -358,7 +364,69 @@ export default class ReviewManager {
       }
     );
 
-    console.log({ recordLog });
+    try {
+      const { nextCard, reviewLog } = recordLog;
+      const storedCard = (
+        await this.#repo.query(`SELECT * FROM srs_card WHERE id = $1`, [
+          card.id,
+        ])
+      )[0] as SRSCardRow;
+      if (!storedCard) {
+        throw new Error(`No card found with id ${card.id}`);
+      }
+
+      const updatedCard = SRSCard.cardToRow(nextCard);
+      let updateQuery = `UPDATE srs_card SET `;
+      const columnUpdateSegments = [
+        `due = $1, last_review = $2`,
+        `stability = $3, difficulty = $4`,
+        `elapsed_days = $5`,
+        `scheduled_days = $6`,
+        `reps = $7, lapses = $8`,
+        `state = $9`,
+      ];
+      updateQuery += columnUpdateSegments.join(', ');
+      updateQuery += ` WHERE id = $10`;
+      const updateParams = [
+        updatedCard.due,
+        updatedCard.last_review,
+        updatedCard.stability,
+        updatedCard.difficulty,
+        updatedCard.elapsed_days,
+        updatedCard.scheduled_days,
+        updatedCard.reps,
+        updatedCard.lapses + storedCard.lapses,
+        updatedCard.state,
+        card.id,
+      ];
+      await this.#repo.mutate(updateQuery, updateParams);
+
+      const insertQuery =
+        `INSERT INTO srs_card_review ` +
+        `(id, card_id, due, stability, difficulty, ` +
+        `elapsed_days, last_elapsed_days, scheduled_days, ` +
+        `rating, state) VALUES ` +
+        `($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`;
+
+      const reviewRow = SRSCardReview.displayToRow(
+        new SRSCardReview(card.id, reviewLog)
+      );
+      const insertParams = [
+        reviewRow.id,
+        reviewRow.card_id,
+        reviewRow.due,
+        reviewRow.stability,
+        reviewRow.difficulty,
+        reviewRow.elapsed_days,
+        reviewRow.last_elapsed_days,
+        reviewRow.scheduled_days,
+        reviewRow.rating,
+        reviewRow.state,
+      ];
+      await this.#repo.mutate(insertQuery, insertParams);
+    } catch (error) {
+      console.error(error);
+    }
   }
   // #endregion
 
@@ -580,13 +648,14 @@ export default class ReviewManager {
   generateMarkdownLink(
     fileLinkedTo: TFile,
     fileContainingLink: TFile,
+    alias?: string,
     subpath?: string
   ) {
     return this.app.fileManager.generateMarkdownLink(
       fileLinkedTo,
       fileContainingLink.path,
       subpath,
-      fileLinkedTo.basename
+      alias || fileLinkedTo.basename
     );
   }
 
