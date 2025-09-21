@@ -6,7 +6,7 @@ import {
   clozeDelimiterPattern,
   MS_PER_DAY,
   PLACEHOLDER_PLUGIN_ICON,
-  SNIPPET_FALLBACK_REVIEW_INTERVAL,
+  SNIPPET_BASE_REVIEW_INTERVAL,
   SNIPPET_REVIEW_INTERVALS,
   SUCCESS_NOTICE_DURATION_MS,
 } from 'src/lib/constants';
@@ -94,7 +94,7 @@ export default class ReviewView extends ItemView {
   }
   // TODO: change to end of day accounting for day rollover offset
   getDueTime() {
-    return Date.now() + 7 * SNIPPET_FALLBACK_REVIEW_INTERVAL;
+    return Date.now() + 7 * SNIPPET_BASE_REVIEW_INTERVAL;
   }
 
   async showNextDue() {
@@ -269,13 +269,18 @@ export default class ReviewView extends ItemView {
       const snippet = item.data;
       buttons.push(
         {
-          title: '(1) Again',
+          title: 'Continue',
+          icon: '',
+          action: async () => await this.reviewSnippet(snippet),
+        },
+        {
+          title: 'Again',
           icon: '🔁',
           action: async () =>
             await this.reviewSnippet(snippet, SNIPPET_REVIEW_INTERVALS.AGAIN),
         },
         {
-          title: '(2) Tomorrow',
+          title: 'Tomorrow',
           icon: '☀',
           action: async () =>
             await this.reviewSnippet(
@@ -284,7 +289,7 @@ export default class ReviewView extends ItemView {
             ),
         },
         {
-          title: '(3) Three Days',
+          title: 'Three Days',
           icon: '📅',
           action: async () =>
             await this.reviewSnippet(
@@ -293,7 +298,7 @@ export default class ReviewView extends ItemView {
             ),
         },
         {
-          title: '(4) One Week',
+          title: 'One Week',
           icon: '↩',
           action: async () =>
             await this.reviewSnippet(
@@ -319,6 +324,50 @@ export default class ReviewView extends ItemView {
       });
       buttonEl.addEventListener('click', button.action);
     });
+
+    if (item && 'dismissed' in item.data) {
+      const snippet = item.data;
+
+      const priorityContainer = this.buttonContainer.createDiv({
+        cls: 'ir-priority-container',
+      });
+
+      priorityContainer.createEl('label', {
+        text: 'Priority',
+        cls: 'ir-priority-label',
+      });
+
+      const priorityField = priorityContainer.createEl('input', {
+        value: `${item.data.priority / 10}`,
+        cls: 'ir-priority-input',
+        type: 'number',
+        attr: {
+          min: 1,
+          max: 5,
+          step: 0.1,
+        },
+      });
+
+      priorityField.addEventListener('blur', (e) => {
+        const rawPriority = Number(priorityField.value);
+        if (Number.isNaN(rawPriority)) {
+          throw new TypeError(`Priority must be a number`);
+        }
+        const clamped = Math.min(5, Math.max(1, rawPriority));
+        const normalized = Math.round(Number(clamped) * 10);
+        priorityField.value = `${clamped}`;
+
+        this.#reviewManager
+          .reprioritizeSnippet(snippet, normalized)
+          .then(() => {
+            new Notice(`Priority updated`, SUCCESS_NOTICE_DURATION_MS);
+          });
+      });
+
+      priorityField.addEventListener('focusin', (e) => {
+        priorityField.select();
+      });
+    }
     // TODO: hotkeys
   }
 
@@ -330,11 +379,14 @@ export default class ReviewView extends ItemView {
   }
 
   // Button action methods
-  private async reviewSnippet(snippet: ISnippet, nextInterval: number) {
-    new Notice(
-      `Marking snippet reviewed with next interval of ${Math.round((10 * nextInterval) / MS_PER_DAY) / 10} days`,
-      SUCCESS_NOTICE_DURATION_MS
-    );
+  private async reviewSnippet(snippet: ISnippet, nextInterval?: number) {
+    if (nextInterval) {
+      new Notice(
+        `Next snippet review manually scheduled for ` +
+          `${Math.round((10 * nextInterval) / MS_PER_DAY) / 10} days from now`,
+        SUCCESS_NOTICE_DURATION_MS
+      );
+    }
 
     await this.#reviewManager.reviewSnippet(snippet, Date.now(), nextInterval);
     await this.showNextDue();

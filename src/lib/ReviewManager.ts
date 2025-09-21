@@ -16,7 +16,7 @@ import type {
 } from 'src/db/types';
 import {
   SNIPPET_DIRECTORY,
-  SNIPPET_FALLBACK_REVIEW_INTERVAL,
+  SNIPPET_BASE_REVIEW_INTERVAL,
   SNIPPET_TAG,
   SOURCE_PROPERTY_NAME,
   ERROR_NOTICE_DURATION_MS,
@@ -25,9 +25,15 @@ import {
   CARD_TAG,
   REVIEW_FETCH_COUNT,
   SNIPPET_REVIEW_INTERVALS,
+  SNIPPET_REVIEW_MULTIPLIER_BASE,
+  SNIPPET_REVIEW_MULTIPLIER_STEP,
+  SNIPPET_DEFAULT_PRIORITY,
   CLOZE_DELIMITERS,
   clozeDelimiterPattern,
   TRANSCLUSION_HIDE_TITLE_ALIAS,
+  MS_PER_MINUTE,
+  MS_PER_DAY,
+  DAY_ROLLOVER_OFFSET_HOURS,
 } from './constants';
 import type { FSRS, FSRSParameters, Grade } from 'ts-fsrs';
 import { fsrs, generatorParameters } from 'ts-fsrs';
@@ -66,15 +72,30 @@ export default class ReviewManager {
     return this.#repo;
   }
 
+  /**
+   * Get the rollover-adjusted end of day as a Unix timestamp.
+   */
   protected getEndOfToday() {
-    // TODO: get the time; if before DAY_ROLLOVER_OFFSET, return today's rollover time; else return tomorrow's
+    const date = new Date();
+    // get start of day in local time zone
+    const startOfToday = Date.parse(date.toDateString());
+    const rolloverOffsetMs = DAY_ROLLOVER_OFFSET_HOURS * 60 * MS_PER_MINUTE;
+    let endOfDayLocal = startOfToday + rolloverOffsetMs;
+    if (Date.parse(date.toUTCString()) - startOfToday >= rolloverOffsetMs) {
+      // add a full day since we're past the rollover point
+      endOfDayLocal += MS_PER_DAY;
+    }
+    // convert to UTC
+    const timezoneDiff = date.getTimezoneOffset() * MS_PER_MINUTE;
+    const endOfDayUtc = endOfDayLocal + timezoneDiff;
+    return endOfDayUtc;
   }
 
   async getCardsDue(
     dueBy?: number,
     limit?: number
   ): Promise<{ data: ISRSCardDisplay; file: TFile }[]> {
-    const dueTime = dueBy ?? Date.now();
+    const dueTime = dueBy ?? this.getEndOfToday();
     try {
       const cardsDue = (
         await this._fetchCardData({ dueBy: dueTime, limit })
@@ -100,7 +121,7 @@ export default class ReviewManager {
     dueBy?: number,
     limit?: number
   ): Promise<{ data: ISnippet; file: TFile }[]> {
-    const dueTime = dueBy ?? Date.now();
+    const dueTime = dueBy ?? this.getEndOfToday();
     try {
       const snippetsDue = (
         await this._fetchSnippetData({ dueBy: dueTime, limit })
@@ -444,7 +465,7 @@ export default class ReviewManager {
       firstReview || Date.now() + SNIPPET_REVIEW_INTERVALS.AGAIN; // TODO: change to tomorrow
     if (!view.file) {
       new Notice(
-        `View type not supported for snippets`,
+        `Snipping not supported from ${view.getViewType()}`,
         ERROR_NOTICE_DURATION_MS
       );
       return;
@@ -466,20 +487,40 @@ export default class ReviewManager {
       [`${SOURCE_PROPERTY_NAME}`]: sourceLink,
     });
 
+    // inherit priority from the source file if it has one, or assign default priority
+    const currentFileEntry = await this.findSnippet(currentFile);
+    const priority = currentFileEntry?.priority ?? SNIPPET_DEFAULT_PRIORITY;
+
     // TODO: transclude the snippet into its source location
 
-    return this.createSnippetFromFile(snippetFile, reviewTime);
+    return this.createSnippetEntry(
+      snippetFile,
+      reviewTime,
+      priority,
+      currentFileEntry?.id
+    );
   }
 
   /**
    * Given a preexisting snippet file, insert into database
    */
-  async createSnippetFromFile(snippetFile: TFile, reviewTime: number) {
+  protected async createSnippetEntry(
+    snippetFile: TFile,
+    reviewTime: number,
+    priority: number,
+    parentId?: string
+  ) {
     try {
       // save the snippet to the database
       const result = await this.#repo.mutate(
-        'INSERT INTO snippet (id, reference, due) VALUES ($1, $2, $3)',
-        [randomUUID(), `${SNIPPET_DIRECTORY}/${snippetFile.name}`, reviewTime]
+        'INSERT INTO snippet (id, reference, due, priority, parent) VALUES ($1, $2, $3, $4, $5)',
+        [
+          randomUUID(),
+          `${SNIPPET_DIRECTORY}/${snippetFile.name}`,
+          reviewTime,
+          priority,
+          parentId,
+        ]
       );
 
       // TODO: verify this correctly catches failed inserts
@@ -517,7 +558,7 @@ export default class ReviewManager {
       query += ' WHERE ' + conditions.join(' AND ');
     }
 
-    query += ' ORDER BY due ASC';
+    query += ' ORDER BY priority DESC';
 
     if (opts?.limit) {
       params.push(opts?.limit);
@@ -528,12 +569,13 @@ export default class ReviewManager {
     return ((await this.#repo.query(query, params)) ?? []) as ISnippet[];
   }
 
-  async findSnippet(snippetFile: TAbstractFile) {
+  async findSnippet(snippetFile: TAbstractFile): Promise<ISnippet | null> {
     const results = await this.#repo.query(
       'SELECT * FROM snippet WHERE reference = $1',
       [snippetFile.path]
     );
-    return results;
+
+    return (results[0] as ISnippet) ?? null;
   }
   /**
    * Add a SnippetReview and set the next review date
@@ -545,7 +587,9 @@ export default class ReviewManager {
   ) {
     const reviewed = reviewTime || Date.now();
     const nextReview =
-      reviewed + (nextReviewInterval ?? SNIPPET_FALLBACK_REVIEW_INTERVAL);
+      reviewed +
+      (nextReviewInterval ??
+        (await this.calcNextSnippetReviewInterval(snippet)));
     try {
       const insertReviewResult = await this.#repo.mutate(
         'INSERT INTO snippet_review (id, snippet_id, review_time) VALUES ($1, $2, $3)',
@@ -559,6 +603,47 @@ export default class ReviewManager {
     } catch (error) {
       console.error(error);
     }
+  }
+
+  protected async calcNextSnippetReviewInterval(snippet: ISnippet) {
+    const intervalMultiplier =
+      SNIPPET_REVIEW_MULTIPLIER_BASE +
+      (snippet.priority - 10) * SNIPPET_REVIEW_MULTIPLIER_STEP;
+
+    const lastReview = (await this.#repo.query(
+      `SELECT review_time FROM snippet_review WHERE snippet_id = $1 ` +
+        `ORDER BY review_time DESC LIMIT 1`,
+      [snippet.id]
+    )) as ISnippetReview[];
+
+    const lastInterval = lastReview[0]
+      ? snippet.due - lastReview[0].review_time
+      : SNIPPET_BASE_REVIEW_INTERVAL;
+
+    const nextInterval = Math.round(lastInterval * intervalMultiplier);
+    return nextInterval;
+  }
+
+  /**
+   * Change the priority of a snippet, automatically adjusting the next due date
+   */
+  async reprioritizeSnippet(snippet: ISnippet, newPriority: number) {
+    if (newPriority % 1 !== 0 || newPriority < 10 || newPriority > 50) {
+      throw new TypeError(
+        `Priority must be an integer between 10 and 50 inclusive; received ${newPriority}`
+      );
+    }
+    const { priority: _, ...rest } = snippet;
+    const newInterval = await this.calcNextSnippetReviewInterval({
+      ...rest,
+      priority: newPriority,
+    });
+    const newDueTime = Date.now() + newInterval;
+
+    await this.#repo.mutate(
+      `UPDATE snippet SET priority = $1, due = $2 WHERE id = $3`,
+      [newPriority, newDueTime, snippet.id]
+    );
   }
 
   async dismissSnippet(snippet: ISnippet) {

@@ -23,8 +23,9 @@ export const FORBIDDEN_TITLE_CHARS = new Set(`#^[]|*"\\/<>:?\n`.split(''));
 export const CONTENT_TITLE_SLICE_LENGTH = 25;
 export const SNIPPET_SLICE_LENGTH = 30;
 
+export const MS_PER_MINUTE = 1000 * 60;
 export const MS_PER_DAY = 1000 * 86_400;
-/** Local time to roll over to a new day. Defaults to 0400 (4 AM) */
+/** Local time to roll over to a new day. Defaults to 0400 (4 AM). Must be positive */
 export const DAY_ROLLOVER_OFFSET_HOURS = 4;
 
 export const TABLE_NAMES = Object.freeze([
@@ -34,8 +35,10 @@ export const TABLE_NAMES = Object.freeze([
   'srs_card_review',
 ] as const);
 
-export const SNIPPET_FALLBACK_REVIEW_INTERVAL = MS_PER_DAY * 1;
-
+export const SNIPPET_BASE_REVIEW_INTERVAL = MS_PER_DAY * 1;
+export const SNIPPET_REVIEW_MULTIPLIER_BASE = 1.01;
+export const SNIPPET_REVIEW_MULTIPLIER_STEP = 0.015;
+export const SNIPPET_DEFAULT_PRIORITY = 25;
 export const SNIPPET_REVIEW_INTERVALS = {
   AGAIN: 1,
   TOMORROW: MS_PER_DAY,

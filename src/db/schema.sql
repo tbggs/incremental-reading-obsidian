@@ -3,7 +3,10 @@ CREATE TABLE IF NOT EXISTS snippet (
   -- source TEXT NOT NULL, -- use source property in the snippet instead so Obsidian updates it properly
   reference TEXT NOT NULL UNIQUE, -- pointer to the snippet's location in the vault
   due INTEGER, -- unix timestamp
-  dismissed INTEGER DEFAULT 0
+  priority INTEGER NOT NULL,
+  parent TEXT REFERENCES snippet(id) DEFAULT NULL,
+  dismissed INTEGER DEFAULT 0,
+  CHECK(priority >= 10 AND priority <= 50)
   -- CHECK(due IS NOT NULL OR dismissed = TRUE) -- Enable this after testing
 );
 

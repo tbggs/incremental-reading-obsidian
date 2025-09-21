@@ -146,7 +146,8 @@ export function searchAll(text: string, pattern: RegExp) {
     if (next.done) break;
     const { index } = next.value;
     const matchText = next.value[0];
-    results.push({ match: matchText, index: index });
+    if (index === undefined) throw new TypeError(`Index must be a number`);
+    results.push({ match: matchText, index });
   }
 
   return results;

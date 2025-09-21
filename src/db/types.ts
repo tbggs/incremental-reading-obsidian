@@ -30,17 +30,27 @@ export interface SRSCardReviewRow
   review: number;
 }
 
-export interface ISnippet {
+export interface ISnippetBase {
   id: string;
   reference: string;
   due: number | null;
-  dismissed?: boolean;
+  dismissed: boolean;
   priority: number;
   parent?: string;
 }
 
-export interface IDueSnippet extends ISnippet {
+export interface ISnippet extends ISnippetBase {
+  id: string;
+  reference: string;
   due: number;
+  dismissed: false;
+  priority: number;
+  parent?: string;
+}
+
+export interface IDismissedSnippet extends ISnippetBase {
+  due: null;
+  dismissed: true;
 }
 
 export interface ISnippetReview {
