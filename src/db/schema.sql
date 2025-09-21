@@ -32,7 +32,7 @@ CREATE TABLE IF NOT EXISTS srs_card (
   scheduled_days REAL NOT NULL,
   reps INTEGER NOT NULL DEFAULT 0,
   lapses INTEGER NOT NULL DEFAULT 0,
-  state TEXT NOT NULL,
+  state INTEGER NOT NULL,
   CHECK(state >= 0 AND state <= 3)
 );
 
@@ -44,12 +44,13 @@ CREATE TABLE IF NOT EXISTS srs_card_review (
   id TEXT NOT NULL, -- UUID
   card_id TEXT REFERENCES srs_card(id),
   due INTEGER NOT NULL,
+  review INTEGER NOT NULL,
   stability REAL NOT NULL,
   difficulty REAL NOT NULL,
   elapsed_days REAL NOT NULL,
   last_elapsed_days REAL NOT NULL,
   scheduled_days REAL NOT NULL,
   rating INTEGER NOT NULL,
-  state TEXT NOT NULL,
+  state INTEGER NOT NULL,
   CHECK(state >= 0 AND state <= 3 AND rating >= 0 AND rating <= 4)
 );

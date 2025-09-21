@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto';
-import type { ISRSCard, SRSCardRow } from 'src/db/types';
-import { createEmptyCard, type State } from 'ts-fsrs';
+import type { ISRSCard, ISRSCardDisplay, SRSCardRow } from 'src/db/types';
+import type { StateType } from 'ts-fsrs';
+import { createEmptyCard, State } from 'ts-fsrs';
 
 /**
  *
@@ -27,8 +28,8 @@ export default class SRSCard implements ISRSCard {
     Object.assign(this, card);
   }
 
-  static rowToDisplay(cardRow: SRSCardRow): ISRSCard {
-    const { created_at, due, last_review, ...rest } = cardRow;
+  static rowToDisplay(cardRow: SRSCardRow): ISRSCardDisplay {
+    const { created_at, due, last_review, state, ...rest } = cardRow;
     return {
       ...rest,
       created_at: new Date(created_at),
@@ -36,10 +37,22 @@ export default class SRSCard implements ISRSCard {
       ...(last_review && {
         last_review: new Date(last_review),
       }),
+      state: State[cardRow.state] as StateType,
     };
   }
 
-  static displayToRow(card: ISRSCard): SRSCardRow {
+  static displayToRow(card: ISRSCardDisplay): SRSCardRow {
+    const { created_at, due, last_review, state, ...rest } = card;
+    return {
+      ...rest,
+      created_at: Date.parse(created_at.toISOString()),
+      due: Date.parse(due.toISOString()),
+      last_review: last_review ? Date.parse(last_review?.toISOString()) : null,
+      state: State[card.state],
+    };
+  }
+
+  static cardToRow(card: ISRSCard): SRSCardRow {
     const { created_at, due, last_review, ...rest } = card;
     return {
       ...rest,

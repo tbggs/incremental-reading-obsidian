@@ -18,10 +18,9 @@ import {
 } from './lib/constants';
 import { SQLiteRepository } from './db/repository';
 import ReviewManager from './lib/ReviewManager';
-import { State } from 'ts-fsrs';
 import ReviewView from './views/ReviewView';
 import type { ISnippet, SRSCardRow } from './db/types';
-import SRSCard from './lib/card';
+import SRSCard from './lib/SRSCard';
 
 // Remember to rename these classes and interfaces!
 
@@ -158,24 +157,7 @@ export default class IncrementalReadingPlugin extends Plugin {
               dismissed: Boolean(snippet.dismissed),
             }))
           );
-        cards &&
-          console.table(
-            cards.map((card) => ({
-              ...card,
-              created_at: new Date(card.created_at).toString(),
-              due: new Date(card.created_at).toString(),
-              last_review: card.last_review
-                ? new Date(card.last_review).toString()
-                : null,
-              state: State[card.state],
-            }))
-          );
-
-        // const due = await this.#reviewManager.getDue();
-        // if (due) {
-        //   console.log('due:');
-        //   console.table(due.all);
-        // }
+        cards && console.table(cards.map(SRSCard.rowToDisplay));
       },
     });
 

@@ -11,6 +11,7 @@ import type {
   ISnippet,
   ISnippetReview,
   ISRSCard,
+  ISRSCardDisplay,
   SRSCardRow,
 } from 'src/db/types';
 import {
@@ -36,9 +37,10 @@ import {
   getSelectionWithBounds,
   searchAll,
 } from './utils';
-import SRSCard from './card';
+import SRSCard from './SRSCard';
 import { randomUUID } from 'crypto';
 import type ReviewView from 'src/views/ReviewView';
+import SRSCardReview from './SRSCardReview';
 
 const FSRS_PARAMETER_DEFAULTS: Partial<FSRSParameters> = {
   enable_fuzz: false,
@@ -70,21 +72,22 @@ export default class ReviewManager {
   async getCardsDue(
     dueBy?: number,
     limit?: number
-  ): Promise<{ data: SRSCard; file: TFile }[]> {
+  ): Promise<{ data: ISRSCardDisplay; file: TFile }[]> {
     const dueTime = dueBy ?? Date.now();
     try {
       const cardsDue = (
         await this._fetchCardData({ dueBy: dueTime, limit })
       ).map(
         async (item) => ({
-          data: item,
+          data: SRSCard.rowToDisplay(item),
           file: await this.getNote(item.reference),
         }),
         this
       );
       const result = await Promise.all(cardsDue);
       return result.filter(
-        (card): card is { data: SRSCard; file: TFile } => card.file !== null
+        (card): card is { data: ISRSCardDisplay; file: TFile } =>
+          card.file !== null
       );
     } catch (error) {
       console.error(error);
@@ -336,7 +339,7 @@ export default class ReviewManager {
   /**
    * TODO: store the updates in db
    */
-  async reviewCard(card: ISRSCard, grade: Grade, reviewTime?: Date) {
+  async reviewCard(card: ISRSCardDisplay, grade: Grade, reviewTime?: Date) {
     const recordLog = this.#fsrs.repeat(
       card,
       reviewTime || new Date(),

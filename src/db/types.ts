@@ -1,6 +1,5 @@
 // Card, Snippet, ReviewLog, FSRSParameters
-import type { Card, FSRSReview } from 'ts-fsrs';
-import { FSRSParameters } from 'ts-fsrs';
+import type { Card, ReviewLog, StateType } from 'ts-fsrs';
 import type { TABLE_NAMES } from '../lib/constants';
 import type { SafeOmit } from 'src/lib/utility-types';
 
@@ -10,15 +9,25 @@ export interface ISRSCard extends Card {
   created_at: Date;
 }
 
+export interface ISRSCardDisplay extends SafeOmit<ISRSCard, 'state'> {
+  state: StateType;
+}
+
 export interface SRSCardRow
   extends SafeOmit<ISRSCard, 'created_at' | 'due' | 'last_review'> {
   created_at: number;
   due: number;
   last_review: number | null;
 }
-export interface ISRSCardReview extends FSRSReview {
+export interface ISRSCardReview extends ReviewLog {
   id: string;
   card_id: string;
+}
+
+export interface SRSCardReviewRow
+  extends SafeOmit<ISRSCardReview, 'due' | 'review'> {
+  due: number;
+  review: number;
 }
 
 export interface ISnippet {

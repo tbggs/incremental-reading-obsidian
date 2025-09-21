@@ -1,7 +1,9 @@
 import type { WorkspaceLeaf, TFile, IconName } from 'obsidian';
 import { ItemView, MarkdownRenderer } from 'obsidian';
-import type { ISnippet, ISRSCard } from 'src/db/types';
+import type { ISnippet, ISRSCard, ISRSCardDisplay } from 'src/db/types';
 import {
+  CLOZE_DELIMITERS,
+  clozeDelimiterPattern,
   MS_PER_DAY,
   PLACEHOLDER_PLUGIN_ICON,
   SNIPPET_FALLBACK_REVIEW_INTERVAL,
@@ -14,7 +16,7 @@ import type { Grade } from 'ts-fsrs';
 import { Rating } from 'ts-fsrs';
 
 type ReviewItem = {
-  data: ISRSCard | ISnippet;
+  data: ISRSCardDisplay | ISnippet;
   file: TFile;
 };
 
@@ -22,7 +24,7 @@ export default class ReviewView extends ItemView {
   static #viewType = 'incremental-reading-review';
   #reviewManager: ReviewManager;
   private reviewQueue: ReviewItem[] | null = null;
-  private currentItem: { data: ISRSCard | ISnippet; file: TFile } | null = null;
+  private currentItem: ReviewItem | null = null;
   private markdownContainer: HTMLElement | null = null;
   private buttonContainer: HTMLElement | null = null;
 
@@ -322,7 +324,7 @@ export default class ReviewView extends ItemView {
   }
 
   // Button action methods
-  private async gradeCard(card: ISRSCard, grade: Grade) {
+  private async gradeCard(card: ISRSCardDisplay, grade: Grade) {
     new Notice(`Graded as: ${grade}`);
     await this.#reviewManager.reviewCard(card, grade);
     await this.showNextDue();
