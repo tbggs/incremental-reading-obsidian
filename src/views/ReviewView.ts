@@ -113,15 +113,17 @@ export default class ReviewView extends ItemView {
     const container = this.containerEl;
     container.empty();
 
-    container.addClass('review-view-container');
+    container.addClass('ir-review-view-container');
 
     this.buttonContainer = container.createDiv({
-      cls: 'review-button-container',
+      cls: 'ir-review-button-container',
     });
 
     this.markdownContainer = container.createDiv({
-      cls: 'review-markdown-container',
+      cls: 'ir-review-markdown-container',
     });
+
+    // Obsidian classes to apply note styling to the review interface
     this.markdownContainer.addClasses([
       'markdown-preview-view',
       'markdown-rendered',
@@ -152,7 +154,7 @@ export default class ReviewView extends ItemView {
     this.markdownContainer.empty();
     this.markdownContainer.createDiv({
       text: 'Nothing due for review.',
-      cls: 'review-placeholder',
+      cls: 'ir-review-placeholder',
     });
   }
 
@@ -169,7 +171,7 @@ export default class ReviewView extends ItemView {
 
       // Create a content div for the rendered markdown
       const contentDiv = this.markdownContainer.createDiv({
-        cls: 'review-content',
+        cls: 'ir-review-content',
       });
       let formattedContent = content;
       if ('state' in item.data && !revealAnswer) {
@@ -194,7 +196,7 @@ export default class ReviewView extends ItemView {
     } catch (error) {
       this.markdownContainer.createDiv({
         text: `Error loading file: ${error.message}`,
-        cls: 'review-error',
+        cls: 'ir-review-error',
       });
     }
   }
@@ -316,7 +318,7 @@ export default class ReviewView extends ItemView {
     buttons.forEach((button) => {
       const buttonEl = this.buttonContainer!.createEl('button', {
         text: `${button.icon} ${button.title}`,
-        cls: 'review-button',
+        cls: 'ir-review-button',
       });
       buttonEl.addEventListener('click', button.action);
     });
@@ -345,13 +347,13 @@ export default class ReviewView extends ItemView {
     // Add inline styles for the layout
     const style = this.containerEl.createEl('style');
     style.textContent = `
-      .review-view-container {
+      .ir-review-view-container {
         display: flex;
         flex-direction: column;
         height: 100%;
       }
       
-      .review-markdown-container {
+      .ir-review-markdown-container {
         overflow: auto;
         padding: 16px;
         margin-left: auto;
@@ -360,11 +362,11 @@ export default class ReviewView extends ItemView {
         max-width: var(--file-line-width);
       }
       
-      .review-content {
+      .ir-review-content {
         height: auto;
       }
       
-      .review-placeholder {
+      .ir-review-placeholder {
         display: flex;
         align-items: center;
         justify-content: center;
@@ -373,7 +375,7 @@ export default class ReviewView extends ItemView {
         font-style: italic;
       }
       
-      .review-error {
+      .ir-review-error {
         display: flex;
         align-items: center;
         justify-content: center;
@@ -382,7 +384,7 @@ export default class ReviewView extends ItemView {
         font-weight: 500;
       }
       
-      .review-button-container {
+      .ir-review-button-container {
         display: flex;
         gap: 8px;
         padding: 12px;
@@ -391,7 +393,7 @@ export default class ReviewView extends ItemView {
         flex-shrink: 0;
       }
       
-      .review-button {
+      .ir-review-button {
         padding: 8px 16px;
         border: 1px solid var(--background-modifier-border);
         background: var(--interactive-normal);
@@ -402,11 +404,11 @@ export default class ReviewView extends ItemView {
         transition: background-color 0.2s ease;
       }
       
-      .review-button:hover {
+      .ir-review-button:hover {
         background: var(--interactive-hover);
       }
       
-      .review-button:active {
+      .ir-review-button:active {
         background: var(--interactive-accent);
         color: var(--text-on-accent);
       }

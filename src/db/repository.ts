@@ -62,9 +62,7 @@ export class SQLiteRepository {
    */
   async mutate(query: string, params: Primitive[] = []) {
     const result = await this.execSql(query, params);
-    if (result) {
-      await this.save();
-    }
+    await this.save();
     return result;
   }
 
