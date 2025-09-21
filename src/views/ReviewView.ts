@@ -143,9 +143,6 @@ export default class ReviewView extends ItemView {
 
     // Create the button bar
     this.createButtonBar(item);
-
-    // Add CSS for layout
-    this.addStyles();
   }
 
   private showPlaceholder() {
@@ -341,77 +338,5 @@ export default class ReviewView extends ItemView {
 
     await this.#reviewManager.reviewSnippet(snippet, Date.now(), nextInterval);
     await this.showNextDue();
-  }
-
-  private addStyles() {
-    // Add inline styles for the layout
-    const style = this.containerEl.createEl('style');
-    style.textContent = `
-      .ir-review-view-container {
-        display: flex;
-        flex-direction: column;
-        height: 100%;
-      }
-      
-      .ir-review-markdown-container {
-        overflow: auto;
-        padding: 16px;
-        margin-left: auto;
-        margin-right: auto;
-        background: var(--background-primary);
-        max-width: var(--file-line-width);
-      }
-      
-      .ir-review-content {
-        height: auto;
-      }
-      
-      .ir-review-placeholder {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        height: 100%;
-        color: var(--text-muted);
-        font-style: italic;
-      }
-      
-      .ir-review-error {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        height: 100%;
-        color: var(--text-error);
-        font-weight: 500;
-      }
-      
-      .ir-review-button-container {
-        display: flex;
-        gap: 8px;
-        padding: 12px;
-        border-top: 1px solid var(--background-modifier-border);
-        background: var(--background-secondary);
-        flex-shrink: 0;
-      }
-      
-      .ir-review-button {
-        padding: 8px 16px;
-        border: 1px solid var(--background-modifier-border);
-        background: var(--interactive-normal);
-        color: var(--text-normal);
-        border-radius: 4px;
-        cursor: pointer;
-        font-size: 14px;
-        transition: background-color 0.2s ease;
-      }
-      
-      .ir-review-button:hover {
-        background: var(--interactive-hover);
-      }
-      
-      .ir-review-button:active {
-        background: var(--interactive-accent);
-        color: var(--text-on-accent);
-      }
-    `;
   }
 }
