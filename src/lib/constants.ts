@@ -5,11 +5,12 @@ export const PLACEHOLDER_PLUGIN_ICON = 'book-open-text';
 
 // TODO: move to settings
 export const WASM_FILE_NAME = 'sql-wasm.wasm';
-export const DATABASE_FILE_PATH = './ir-user-data.sqlite';
-export const TEST_DATABASE_FILE_PATH = './ir-test-data.sqlite';
 export const SCHEMA_FILE_PATH = 'src/db/schema.sql';
-export const SNIPPET_DIRECTORY = 'incremental-reading/snippets';
-export const CARD_DIRECTORY = 'incremental-reading/cards';
+export const DATA_DIRECTORY = 'incremental-reading';
+export const DATABASE_FILE_PATH = `${DATA_DIRECTORY}/ir-user-data.sqlite`;
+export const TEST_DATABASE_FILE_PATH = './ir-test-data.sqlite';
+export const SNIPPET_DIRECTORY = `${DATA_DIRECTORY}/snippets`;
+export const CARD_DIRECTORY = `${DATA_DIRECTORY}/cards`;
 
 export const SNIPPET_TAG = 'ir-text-snippet';
 export const CARD_TAG = 'ir-card';

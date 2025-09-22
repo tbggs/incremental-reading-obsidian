@@ -1,7 +1,7 @@
 import { normalizePath, type App, type DataAdapter } from 'obsidian';
 import type { BindParams, Database, QueryExecResult } from 'sql.js';
 import initSqlJs from 'sql.js';
-import { PLUGIN_ID, WASM_FILE_NAME } from '../lib/constants';
+import { DATA_DIRECTORY, PLUGIN_ID, WASM_FILE_NAME } from '../lib/constants';
 import type { Primitive } from '../lib/utility-types';
 import type { RowTypes } from './types';
 
@@ -35,7 +35,12 @@ export class SQLiteRepository {
     const repo = new SQLiteRepository(app, dbFilePath, schemaFilePath);
     // load the database file or create it if loading fails
     // TODO: handle failed loads when the file exists
-    (await repo.loadDb()) ?? (await repo.initDb()); // TODO: uncomment to persist data between starts
+    if (repo.dbExists()) {
+      await repo.loadDb();
+    } else {
+      await repo.initDb();
+    }
+    // (await repo.loadDb()) ?? (await repo.initDb()); // TODO: uncomment to persist data between starts
     // await repo.initDb(); // TODO: remove for production
     return repo;
   }
@@ -129,25 +134,39 @@ export class SQLiteRepository {
   async save() {
     if (!this.db) throw new Error('Database was not initialized on repository');
     const data = this.db.export().buffer;
-    return this.app.vault.adapter.writeBinary(
-      this.getDbFilePath(this.#dbFilePath),
-      data as ArrayBuffer
-    );
+    try {
+      const dataDir = this.app.vault.getFolderByPath(DATA_DIRECTORY);
+      if (!dataDir) {
+        await this.app.vault.createFolder(DATA_DIRECTORY);
+      }
+      return this.app.vault.adapter.writeBinary(
+        normalizePath(this.#dbFilePath),
+        data as ArrayBuffer
+      );
+    } catch (error) {
+      console.error('Failed to save database to disk:' + error);
+    }
   }
 
   /**
    * Initialize the database, assuming the file doesn't exist
-   * @returns a Database
+   * @returns a Database, or null if an error is thrown
    */
   async initDb() {
-    const sql = await this.loadWasm();
-    this.db = new sql.Database();
-    const schema = await this.adapter.read(
-      this.getDbFilePath(this.#schemaFilePath)
-    );
-    this.db.exec(schema);
-    await this.save();
-    return this.db;
+    try {
+      const sql = await this.loadWasm();
+      this.db = new sql.Database();
+      const schema = await this.adapter.read(
+        this.getSchemaPath(this.#schemaFilePath)
+      );
+      this.db.exec(schema);
+      await this.save();
+      console.log('Incremental Reading database initialized');
+      return this.db;
+    } catch (error) {
+      console.error(error);
+      return null;
+    }
   }
 
   async getSchema(tableName: string) {
@@ -171,40 +190,84 @@ export class SQLiteRepository {
   }
 
   /**
+   * Check if the database file exists
+   */
+  private dbExists() {
+    try {
+      const dataDir = this.app.vault.getFolderByPath(DATA_DIRECTORY);
+      if (!dataDir) {
+        return false;
+      }
+      return !!this.app.vault.getAbstractFileByPath(
+        normalizePath(this.#dbFilePath)
+      );
+    } catch (e) {
+      // TODO: properly handle errors
+      console.error(e);
+      return false;
+    }
+  }
+
+  /**
    * Attempt to load a pre-existing database from disk
    * @returns a Database or null if the file is invalid or not found
    */
   private async loadDb() {
     try {
       const sql = await this.loadWasm();
+      // const dataDir = this.app.vault.getFolderByPath(DATA_DIRECTORY);
+      // if (!dataDir) {
+      //   await this.app.vault.createFolder(DATA_DIRECTORY);
+      // }
       const dbArrayBuffer = await this.app.vault.adapter.readBinary(
-        this.getDbFilePath(this.#dbFilePath)
+        normalizePath(this.#dbFilePath)
       );
       this.db = new sql.Database(Buffer.from(dbArrayBuffer));
       console.log('Incremental Reading database loaded');
       return this.db;
-    } catch (e: unknown) {
+    } catch (e) {
       // TODO: properly handle errors
-      if (e instanceof Error) {
-        // console.error(e);
-      } else {
-        console.error(typeof e); // TODO: properly handle this case
-      }
-
+      // console.error(e);
       return null;
     }
   }
 
   private async loadWasm() {
+    const pathSegments = [
+      this.app.vault.adapter.basePath, // remove?
+      this.app.vault.configDir,
+      'plugins',
+      PLUGIN_ID,
+      WASM_FILE_NAME,
+    ];
+    const basePath = pathSegments.join('/');
+    const wasmPath = normalizePath(basePath);
+
     const sql = await initSqlJs({
       // TODO: handle throws
-      locateFile: (_file) => this.getDbFilePath(WASM_FILE_NAME, true),
+      locateFile: (_file) => wasmPath,
     });
 
     return sql;
   }
 
-  private getDbFilePath(fileName: string, absolute = false) {
+  // private getWasmPath(fileName: string, absolute = false) {
+  //   const pathSegments = [
+  //     this.app.vault.configDir,
+  //     'plugins',
+  //     PLUGIN_ID,
+  //     fileName,
+  //   ];
+
+  //   if (absolute) {
+  //     pathSegments.unshift(this.app.vault.adapter.basePath);
+  //   }
+
+  //   const basePath = pathSegments.join('/');
+  //   return normalizePath(basePath);
+  // }
+
+  private getSchemaPath(fileName: string) {
     const pathSegments = [
       this.app.vault.configDir,
       'plugins',
@@ -212,11 +275,19 @@ export class SQLiteRepository {
       fileName,
     ];
 
-    if (absolute) {
-      pathSegments.unshift(this.app.vault.adapter.basePath);
-    }
-
     const basePath = pathSegments.join('/');
     return normalizePath(basePath);
   }
+
+  // private getDbFilePath(fileName: string) {
+  //   const pathSegments = [
+  //     // this.app.vault.configDir,
+  //     // 'plugins',
+  //     // PLUGIN_ID,
+  //     fileName,
+  //   ];
+
+  //   const basePath = pathSegments.join('/');
+  //   return normalizePath(basePath);
+  // }
 }
