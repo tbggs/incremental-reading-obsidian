@@ -2,6 +2,7 @@
 import type { Card, ReviewLog, StateType } from 'ts-fsrs';
 import type { TABLE_NAMES } from '../lib/constants';
 import type { SafeOmit } from 'src/lib/utility-types';
+import type { TFile } from 'obsidian';
 
 export interface ISRSCard extends Card {
   id: string;
@@ -68,3 +69,8 @@ export interface TableNameToRowType extends Record<TableName, RowTypes> {
   srs_card: SRSCardRow;
   srs_card_review: ISRSCardReview;
 }
+
+export type ReviewItem = {
+  data: ISRSCardDisplay | ISnippet;
+  file: TFile;
+};

@@ -1,6 +1,11 @@
 import type { WorkspaceLeaf, TFile, IconName } from 'obsidian';
 import { ItemView, MarkdownRenderer } from 'obsidian';
-import type { ISnippet, ISRSCard, ISRSCardDisplay } from 'src/db/types';
+import type {
+  ISnippet,
+  ISRSCard,
+  ISRSCardDisplay,
+  ReviewItem,
+} from 'src/db/types';
 import {
   CLOZE_DELIMITERS,
   clozeDelimiterPattern,
@@ -14,11 +19,6 @@ import type ReviewManager from 'src/lib/ReviewManager';
 import { searchAll } from 'src/lib/utils';
 import type { Grade } from 'ts-fsrs';
 import { Rating } from 'ts-fsrs';
-
-type ReviewItem = {
-  data: ISRSCardDisplay | ISnippet;
-  file: TFile;
-};
 
 export default class ReviewView extends ItemView {
   static #viewType = 'incremental-reading-review';
