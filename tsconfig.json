@@ -1,20 +1,30 @@
 {
   "compilerOptions": {
-    "baseUrl": ".",
     "inlineSourceMap": true,
     "inlineSources": true,
     "module": "ESNext",
     "target": "ES6",
     "allowJs": true,
     "noImplicitAny": true,
-    "moduleResolution": "node",
+    "moduleResolution": "bundler",
     "resolveJsonModule": true,
+    "noEmit": true,
     "importHelpers": true,
     "isolatedModules": true,
     "strictNullChecks": true,
     "skipLibCheck": true,
     "types": ["obsidian-typings"],
+    "jsx": "react-jsx",
+    "jsxImportSource": "preact",
+    "baseUrl": "./",
+    "paths": {
+      "react": ["./node_modules/preact/compat/"],
+      "react-dom": ["./node_modules/preact/compat/"],
+      "react-dom/*": ["./node_modules/preact/compat/*"],
+      "react-types": ["./node_modules/@types/react/"],
+      "#/*": ["./src/*"]
+    },
     "lib": ["DOM", "ES5", "ES6", "ES7", "ES2021"]
   },
-  "include": ["src/**/*.ts", "vitest.config.ts"]
+  "include": ["src/**/*.ts", "src/**/*.tsx", "vitest.config.ts"]
 }
