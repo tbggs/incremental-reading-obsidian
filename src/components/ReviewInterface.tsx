@@ -25,8 +25,8 @@ export function createReviewInterface(props: {
 }
 
 function ReviewInterface() {
-  const reviewContext = useReviewContext();
-  const currentItem = reviewContext.currentItem ?? reviewContext.getNext();
+  const { currentItem, getNext } = useReviewContext();
+  if (!currentItem) getNext();
 
   return (
     <div className={'ir-review-interface view-content'}>

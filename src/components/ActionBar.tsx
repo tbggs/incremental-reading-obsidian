@@ -34,18 +34,7 @@ export function ActionBar() {
  * - undo last review
  */
 function GlobalActions() {
-  const { currentItem, reviewQueue, getNext } = useReviewContext();
-  return (
-    <>
-      <Button
-        label={currentItem ? 'Skip' : 'Begin Review'}
-        handleClick={() => {
-          getNext();
-        }}
-        disabled={!reviewQueue}
-      />
-    </>
-  );
+  return <></>;
 }
 
 /**
@@ -53,12 +42,18 @@ function GlobalActions() {
  * - go to parent
  */
 function ItemActions({ reviewItem }: { reviewItem: ReviewItem }) {
-  const { dismissItem } = useReviewContext();
+  const { dismissItem, skipItem } = useReviewContext();
   return (
     <>
       <Button
         label="Dismiss"
         handleClick={async () => await dismissItem(reviewItem)}
+      />
+      <Button
+        label={'Skip'}
+        handleClick={() => {
+          skipItem(reviewItem);
+        }}
       />
     </>
   );

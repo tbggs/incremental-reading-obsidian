@@ -11,6 +11,7 @@ import { render } from 'preact';
 export default class ReviewView extends ItemView {
   static #viewType = 'incremental-reading-review';
   #reviewManager: ReviewManager;
+  seenIds: Set<string> = new Set();
   #currentItem: ReviewItem | null = null;
   plugin: IncrementalReadingPlugin;
   activeEditor: any;
