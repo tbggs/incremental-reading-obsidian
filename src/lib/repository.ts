@@ -3,7 +3,7 @@ import type { BindParams, Database, QueryExecResult } from 'sql.js';
 import initSqlJs from 'sql.js';
 import { DATA_DIRECTORY, WASM_FILE_PATH } from '../lib/constants';
 import type { Primitive } from '../lib/utility-types';
-import type { RowTypes } from './types';
+import type { RowTypes } from '../lib/types';
 
 export class SQLiteRepository {
   app: App;

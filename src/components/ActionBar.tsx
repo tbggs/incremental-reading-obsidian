@@ -1,5 +1,5 @@
-import type { ReviewItem } from '#/db/types';
-import { isReviewCard, type ReviewCard, type ReviewSnippet } from '#/db/types';
+import type { ReviewItem } from '#/lib/types';
+import { isReviewCard, type ReviewCard, type ReviewSnippet } from '#/lib/types';
 import { Rating } from 'ts-fsrs';
 import { useReviewContext } from './ReviewContext';
 import { useCallback, useEffect, useState } from 'preact/hooks';

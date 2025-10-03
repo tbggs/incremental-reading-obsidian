@@ -16,10 +16,10 @@ import {
   SCHEMA_FILE_PATH,
   SNIPPET_DIRECTORY,
 } from './lib/constants';
-import { SQLiteRepository } from './db/repository';
+import { SQLiteRepository } from './lib/repository';
 import ReviewManager from './lib/ReviewManager';
 import ReviewView from './views/ReviewView';
-import type { ISnippet, SRSCardRow } from './db/types';
+import type { ISnippet, SRSCardRow } from './lib/types';
 import SRSCard from './lib/SRSCard';
 import { getEditorClass } from './lib/utils';
 

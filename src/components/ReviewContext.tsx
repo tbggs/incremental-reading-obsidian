@@ -13,7 +13,7 @@ import {
   type ISnippet,
   type ISRSCardDisplay,
   type ReviewItem,
-} from '#/db/types';
+} from '#/lib/types';
 import {
   CONTENT_TITLE_SLICE_LENGTH,
   MS_PER_DAY,

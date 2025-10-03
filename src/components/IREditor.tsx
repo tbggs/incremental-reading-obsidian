@@ -23,7 +23,7 @@ import {
 import type { EditState } from './types';
 import { useReviewContext } from './ReviewContext';
 import { getBaseMarkdownExtensions } from '../lib/utils';
-import type { ReviewItem } from '#/db/types';
+import type { ReviewItem } from '#/lib/types';
 
 /**
  * Credit goes to mgmeyers for figuring out how to get the editor prototype. See the original code here: https://github.com/mgmeyers/obsidian-kanban/blob/main/src/components/Editor/MarkdownEditor.tsx

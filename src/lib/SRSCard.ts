@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto';
-import type { ISRSCard, ISRSCardDisplay, SRSCardRow } from 'src/db/types';
+import type { ISRSCard, ISRSCardDisplay, SRSCardRow } from '#/lib/types';
 import type { StateType } from 'ts-fsrs';
 import { createEmptyCard, State } from 'ts-fsrs';
 import { CLOZE_DELIMITER_PATTERN, CARD_ANSWER_REPLACEMENT } from './constants';

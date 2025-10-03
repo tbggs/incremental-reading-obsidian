@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto';
-import type { ISRSCardReview, SRSCardReviewRow } from 'src/db/types';
+import type { ISRSCardReview, SRSCardReviewRow } from '#/lib/types';
 import type { ReviewLog } from 'ts-fsrs';
 import type { State } from 'ts-fsrs';
 

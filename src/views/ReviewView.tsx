@@ -2,7 +2,7 @@ import type IncrementalReadingPlugin from '#/main';
 import type { IconName, TFile } from 'obsidian';
 import type { WorkspaceLeaf } from 'obsidian';
 import { ItemView } from 'obsidian';
-import type { ReviewItem } from '#/db/types';
+import type { ReviewItem } from '#/lib/types';
 import { PLACEHOLDER_PLUGIN_ICON } from '#/lib/constants';
 import type ReviewManager from '#/lib/ReviewManager';
 import { createReviewInterface } from '#/components/ReviewInterface';

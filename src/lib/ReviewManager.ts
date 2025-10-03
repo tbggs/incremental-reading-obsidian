@@ -6,14 +6,14 @@ import {
   type Editor,
   type MarkdownView,
 } from 'obsidian';
-import type { SQLiteRepository } from 'src/db/repository';
+import type { SQLiteRepository } from './repository';
 import type {
   ISnippet,
   ISnippetReview,
   ISRSCard,
   ISRSCardDisplay,
   SRSCardRow,
-} from 'src/db/types';
+} from '#/lib/types';
 import {
   SNIPPET_DIRECTORY,
   SNIPPET_BASE_REVIEW_INTERVAL,

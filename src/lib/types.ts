@@ -1,6 +1,6 @@
 // Card, Snippet, ReviewLog, FSRSParameters
 import type { Card, ReviewLog, StateType } from 'ts-fsrs';
-import type { TABLE_NAMES } from '../lib/constants';
+import type { TABLE_NAMES } from './constants';
 import type { SafeOmit } from 'src/lib/utility-types';
 import type { TFile } from 'obsidian';
 
