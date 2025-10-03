@@ -1,8 +1,8 @@
 export const PLACEHOLDER_PLUGIN_ICON = 'book-open-text';
 
 // TODO: move to settings
-export const WASM_FILE_PATH = './db/sql-wasm.wasm';
-export const SCHEMA_FILE_PATH = './db/schema.sql';
+export const WASM_FILE_PATH = './sql-wasm.wasm';
+export const SCHEMA_FILE_PATH = './schema.sql';
 export const DATA_DIRECTORY = 'incremental-reading';
 export const DATABASE_FILE_PATH = `${DATA_DIRECTORY}/ir-user-data.sqlite`;
 export const TEST_DATABASE_FILE_PATH = './ir-test-data.sqlite';
