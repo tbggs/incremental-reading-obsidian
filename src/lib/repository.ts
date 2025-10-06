@@ -1,16 +1,18 @@
 import { normalizePath, type App, type DataAdapter } from 'obsidian';
 import type { BindParams, Database, QueryExecResult } from 'sql.js';
 import initSqlJs from 'sql.js';
-import { DATA_DIRECTORY, WASM_FILE_PATH } from '../lib/constants';
+import { DATA_DIRECTORY } from '../lib/constants';
 import type { Primitive } from '../lib/utility-types';
 import type { RowTypes } from '../lib/types';
+// @ts-ignore - WASM imported as base64 string via custom esbuild plugin
+import wasmBase64 from '../db/sql-wasm.wasm';
 
 export class SQLiteRepository {
   app: App;
   adapter: DataAdapter;
   db: Database;
   #dbFilePath: string;
-  #schemaFilePath: string;
+  #schema: string;
   #pluginDir: string;
 
   /**
@@ -19,34 +21,29 @@ export class SQLiteRepository {
   private constructor(
     app: App,
     dbFilePath: string,
-    schemaFilePath: string,
+    schema: string,
     pluginDir: string
   ) {
     this.app = app;
     this.adapter = app.vault.adapter;
     this.#dbFilePath = dbFilePath;
-    this.#schemaFilePath = schemaFilePath;
+    this.#schema = schema;
     this.#pluginDir = pluginDir;
   }
 
   /**
    * Asynchronous factory function
-   * @param dbFilePath the path of the database file relative to the plugin root
-   * @param schemaFilePath the path of the schema.sql file relative to the plugin root
+   * @param dbFilePath the path of the database file relative to the vault root
+   * @param schema the SQL schema as a string
    * @param pluginDir the plugin's installation directory (from this.manifest.dir)
    */
   static async start(
     app: App,
     dbFilePath: string,
-    schemaFilePath: string,
+    schema: string,
     pluginDir: string
   ): Promise<SQLiteRepository> {
-    const repo = new SQLiteRepository(
-      app,
-      dbFilePath,
-      schemaFilePath,
-      pluginDir
-    );
+    const repo = new SQLiteRepository(app, dbFilePath, schema, pluginDir);
     // load the database file or create it if loading fails
     // TODO: handle failed loads when the file exists
     if (repo.dbExists()) {
@@ -175,8 +172,7 @@ export class SQLiteRepository {
     try {
       const sql = await this.loadWasm();
       this.db = new sql.Database();
-      const schema = await this.adapter.read(this.getSchemaPath());
-      this.db.exec(schema);
+      this.db.exec(this.#schema);
       await this.save();
       console.log('Incremental Reading database initialized');
       return this.db;
@@ -247,18 +243,15 @@ export class SQLiteRepository {
   }
 
   private async loadWasm() {
-    const relativePath = normalizePath(`${this.#pluginDir}/${WASM_FILE_PATH}`);
-    const wasmPath = this.adapter.getFullRealPath(relativePath);
+    // Decode base64 WASM to binary
+    const wasmBinary = Uint8Array.from(atob(wasmBase64), (c) =>
+      c.charCodeAt(0)
+    ).buffer;
 
     const sql = await initSqlJs({
-      // TODO: handle throws
-      locateFile: (_file) => wasmPath,
+      wasmBinary,
     });
 
     return sql;
-  }
-
-  private getSchemaPath() {
-    return normalizePath(`${this.#pluginDir}/${this.#schemaFilePath}`);
   }
 }

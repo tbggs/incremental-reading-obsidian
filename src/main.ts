@@ -13,10 +13,11 @@ import {
   DATABASE_FILE_PATH,
   ERROR_NOTICE_DURATION_MS,
   PLACEHOLDER_PLUGIN_ICON,
-  SCHEMA_FILE_PATH,
   SNIPPET_DIRECTORY,
 } from './lib/constants';
 import { SQLiteRepository } from './lib/repository';
+// @ts-ignore - SQL schema imported via custom esbuild plugin
+import databaseSchema from './db/schema.sql';
 import ReviewManager from './lib/ReviewManager';
 import ReviewView from './views/ReviewView';
 import type { ISnippet, SRSCardRow } from './lib/types';
@@ -243,7 +244,7 @@ export default class IncrementalReadingPlugin extends Plugin {
       const repo = await SQLiteRepository.start(
         this.app,
         DATABASE_FILE_PATH,
-        SCHEMA_FILE_PATH,
+        databaseSchema,
         this.manifest.dir
       );
       this.#reviewManager = new ReviewManager(this.app, repo);
