@@ -113,12 +113,17 @@ export class SQLiteRepository {
    * @returns an array where each top-level element is the result of a query
    */
   async execSql(query: string, params: Primitive[] = []) {
-    const results = this.db.exec(query, this.coerceParams(params));
-    if (!results || !results.length) return [[]];
+    try {
+      const results = this.db.exec(query, this.coerceParams(params));
+      if (!results || !results.length) return [[]];
 
-    // in SQL.js, selected rows are returned in form [{ columns: string[], values: Array<SQLValue[]> }]
-    const formatted = results.map(this.formatResult);
-    return formatted;
+      // in SQL.js, selected rows are returned in form [{ columns: string[], values: Array<SQLValue[]> }]
+      const formatted = results.map(this.formatResult);
+      return formatted;
+    } catch (error) {
+      console.error(error);
+      return [[]];
+    }
   }
 
   /**
@@ -146,6 +151,9 @@ export class SQLiteRepository {
     if (!this.db) throw new Error('Database was not initialized on repository');
     const data = this.db.export().buffer;
     try {
+      if (!this.dbExists()) {
+        await this.initDb();
+      }
       const dataDir = this.app.vault.getFolderByPath(DATA_DIRECTORY);
       if (!dataDir) {
         await this.app.vault.createFolder(DATA_DIRECTORY);
@@ -178,6 +186,7 @@ export class SQLiteRepository {
     }
   }
 
+  /** Print database schema in the console */
   async _getSchema(tableName: string) {
     if (!this.db) throw new Error('Database was not initialized on repository');
     const result = this.db.exec(
@@ -219,7 +228,7 @@ export class SQLiteRepository {
 
   /**
    * Attempt to load a pre-existing database from disk
-   * @returns a Database or null if the file is invalid or not found
+   * @returns a Database, or `null` if the file is invalid or not found
    */
   private async loadDb() {
     try {

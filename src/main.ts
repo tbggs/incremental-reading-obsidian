@@ -60,13 +60,13 @@ export default class IncrementalReadingPlugin extends Plugin {
 
     this.addCommand({
       id: 'extract-selection',
-      name: 'Extract selection',
-      hotkeys: [
-        // {
-        //   modifiers: ['Alt'],
-        //   key: 'X',
-        // },
-      ],
+      name: 'Extract selection to snippet',
+      // hotkeys: [
+      //   {
+      //     modifiers: ['Alt'],
+      //     key: 'X',
+      //   },
+      // ],
       callback: async () => {
         if (!this.#reviewManager) {
           new Notice(`Plugin still loading`);
@@ -92,12 +92,12 @@ export default class IncrementalReadingPlugin extends Plugin {
     this.addCommand({
       id: 'create-card',
       name: 'Create SRS card',
-      hotkeys: [
-        // {
-        //   modifiers: ['Alt', 'Shift'],
-        //   key: 'C',
-        // },
-      ],
+      // hotkeys: [
+      //   {
+      //     modifiers: ['Alt', 'Shift'],
+      //     key: 'C',
+      //   },
+      // ],
       callback: () => {
         if (!this.#reviewManager) {
           new Notice(`Plugin still loading`);
