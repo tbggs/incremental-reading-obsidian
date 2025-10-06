@@ -144,11 +144,11 @@ export class SQLiteRepository {
   /**
    * Overwrite or create the database file
    */
-  async save() {
+  async save(creating: boolean = false) {
     if (!this.db) throw new Error('Database was not initialized on repository');
     const data = this.db.export().buffer;
     try {
-      if (!this.dbExists()) {
+      if (!creating && !this.dbExists()) {
         await this.initDb();
       }
       const dataDir = this.app.vault.getFolderByPath(DATA_DIRECTORY);
@@ -173,7 +173,7 @@ export class SQLiteRepository {
       const sql = await this.loadWasm();
       this.db = new sql.Database();
       this.db.exec(this.#schema);
-      await this.save();
+      await this.save(true);
       console.log('Incremental Reading database initialized');
       return this.db;
     } catch (error) {
@@ -244,14 +244,20 @@ export class SQLiteRepository {
 
   private async loadWasm() {
     // Decode base64 WASM to binary
-    const wasmBinary = Uint8Array.from(atob(wasmBase64), (c) =>
-      c.charCodeAt(0)
-    ).buffer;
+    const buffer = Buffer.from(wasmBase64, 'base64');
 
-    const sql = await initSqlJs({
-      wasmBinary,
-    });
+    // Convert Buffer to Uint8Array for better compatibility with Emscripten
+    const wasmBinary = new Uint8Array(buffer);
 
-    return sql;
+    try {
+      const sql = await initSqlJs({
+        wasmBinary: wasmBinary as unknown as ArrayBuffer,
+      });
+
+      return sql;
+    } catch (error) {
+      console.error('Failed to initialize WASM:', error);
+      throw error;
+    }
   }
 }
