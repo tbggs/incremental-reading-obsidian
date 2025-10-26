@@ -6,5 +6,5 @@
 	"description": "Leverage spaced repetition to incrementally build understanding and retain knowledge.",
 	"author": "Gautam Panakkal",
 	"authorUrl": "https://github.com/gpanakkal",
-	"isDesktopOnly": true
+	"isDesktopOnly": false
 }
